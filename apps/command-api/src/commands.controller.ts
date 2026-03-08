@@ -46,11 +46,10 @@ import type {
   TriggerTimeoutScanResponse,
   TriggerNodeRecoveryRequest,
   TriggerNodeRecoveryResponse,
-  UpdateNodeConfigRequest,
   UpdateNodeConfigResponse
 } from "@command-neural/shared-types";
 import { CommandsService } from "./commands.service";
-import { validateCreateCommandDraftRequest } from "./commands.validation";
+import { validateCreateCommandDraftRequest, validateUpdateNodeConfigRequest } from "./commands.validation";
 
 @Controller("commands")
 export class CommandsController {
@@ -208,11 +207,18 @@ export class CommandsController {
   @Patch("/nodes/:nodeId/config")
   updateNodeConfig(
     @Param("nodeId") nodeId: string,
-    @Body() body: UpdateNodeConfigRequest,
+    @Body() body: unknown,
     @Headers("x-operator-role") operatorRole?: string
   ): UpdateNodeConfigResponse {
     this.ensureOperatorRole(operatorRole, ["GUANNING", "SUNWU"]);
-    const updated = this.commandsService.updateNodeConfig(nodeId, body);
+    const validation = validateUpdateNodeConfigRequest(body);
+    if (!validation.ok) {
+      throw new BadRequestException({
+        message: "Validation failed",
+        errors: validation.errors
+      });
+    }
+    const updated = this.commandsService.updateNodeConfig(nodeId, validation.value);
     if (!updated) {
       throw new NotFoundException({
         message: "Node not found",

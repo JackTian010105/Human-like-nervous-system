@@ -1,4 +1,4 @@
-import type { CreateCommandDraftRequest } from "@command-neural/shared-types";
+import type { CreateCommandDraftRequest, UpdateNodeConfigRequest } from "@command-neural/shared-types";
 
 type ValidationErrors = Partial<Record<keyof CreateCommandDraftRequest, string>>;
 
@@ -42,4 +42,82 @@ export function validateCreateCommandDraftRequest(body: unknown): {
       feedbackRequirement: candidate.feedbackRequirement!.trim()
     }
   };
+}
+
+type NodeConfigValidationErrors = {
+  nodeName?: string;
+  roleType?: string;
+  parentNodeId?: string;
+  chainPosition?: string;
+  active?: string;
+  request?: string;
+};
+
+const NODE_ROLE_TYPES = new Set(["CAPTAIN", "MEMBER", "EXTERNAL"]);
+
+export function validateUpdateNodeConfigRequest(body: unknown): {
+  ok: true;
+  value: UpdateNodeConfigRequest;
+} | {
+  ok: false;
+  errors: NodeConfigValidationErrors;
+} {
+  const candidate = (body ?? {}) as Record<string, unknown>;
+  const errors: NodeConfigValidationErrors = {};
+  const value: UpdateNodeConfigRequest = {};
+
+  if (candidate.nodeName !== undefined) {
+    if (!isNonEmptyText(candidate.nodeName)) {
+      errors.nodeName = "nodeName must be a non-empty string";
+    } else {
+      value.nodeName = candidate.nodeName.trim();
+    }
+  }
+
+  if (candidate.roleType !== undefined) {
+    if (!isNonEmptyText(candidate.roleType)) {
+      errors.roleType = "roleType must be one of CAPTAIN|MEMBER|EXTERNAL";
+    } else {
+      const normalizedRole = candidate.roleType.trim().toUpperCase();
+      if (!NODE_ROLE_TYPES.has(normalizedRole)) {
+        errors.roleType = "roleType must be one of CAPTAIN|MEMBER|EXTERNAL";
+      } else {
+        value.roleType = normalizedRole as UpdateNodeConfigRequest["roleType"];
+      }
+    }
+  }
+
+  if (candidate.parentNodeId !== undefined) {
+    if (!isNonEmptyText(candidate.parentNodeId)) {
+      errors.parentNodeId = "parentNodeId must be a non-empty string";
+    } else {
+      value.parentNodeId = candidate.parentNodeId.trim();
+    }
+  }
+
+  if (candidate.chainPosition !== undefined) {
+    if (!isNonEmptyText(candidate.chainPosition)) {
+      errors.chainPosition = "chainPosition must be a non-empty string";
+    } else {
+      value.chainPosition = candidate.chainPosition.trim();
+    }
+  }
+
+  if (candidate.active !== undefined) {
+    if (typeof candidate.active !== "boolean") {
+      errors.active = "active must be a boolean";
+    } else {
+      value.active = candidate.active;
+    }
+  }
+
+  if (Object.keys(value).length === 0) {
+    errors.request = "at least one config field is required";
+  }
+
+  if (Object.keys(errors).length > 0) {
+    return { ok: false, errors };
+  }
+
+  return { ok: true, value };
 }
