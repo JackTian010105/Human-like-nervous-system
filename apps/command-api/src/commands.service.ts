@@ -442,17 +442,27 @@ export class CommandsService implements OnModuleInit {
       return undefined;
     }
 
+    const normalizedExceptionNote = params.exceptionNote?.trim() || undefined;
+    const isSameFeedback =
+      delivery.executionStatus === params.executionStatus &&
+      (delivery.executionExceptionNote ?? undefined) === normalizedExceptionNote;
+    if (isSameFeedback) {
+      return this.toNodeCommandCard(delivery);
+    }
+
     delivery.executionStatus = params.executionStatus;
     delivery.executionCompletedAt = new Date().toISOString();
-    delivery.executionExceptionNote = params.exceptionNote;
+    delivery.executionExceptionNote = normalizedExceptionNote;
     if (delivery.nodeStatus === "ANOMALY_TIMEOUT") {
       delivery.nodeStatus = "UNDERSTOOD";
     }
     this.upsertNodeDelivery(delivery);
-    this.markTimeoutRecoveredIfNeeded(delivery, "ExecutionFeedbackSubmitted");
-    this.emitRealtime(params.commandId, "ExecutionFeedbackSubmitted", {
+    this.markTimeoutRecoveredIfNeeded(delivery, "ExecutionReported");
+    this.emitRealtime(params.commandId, "ExecutionReported", {
       nodeId: params.nodeId,
-      executionStatus: params.executionStatus
+      executionStatus: params.executionStatus,
+      executionCompletedAt: delivery.executionCompletedAt,
+      executionExceptionNote: normalizedExceptionNote
     });
     return this.toNodeCommandCard(delivery);
   }
@@ -1177,7 +1187,7 @@ export class CommandsService implements OnModuleInit {
 
   private markTimeoutRecoveredIfNeeded(
     delivery: NodeDelivery,
-    recoveredByEventType: "UnderstandingSubmitted" | "ExecutionFeedbackSubmitted" | "CommandPropagated"
+    recoveredByEventType: "UnderstandingSubmitted" | "ExecutionReported" | "CommandPropagated"
   ): void {
     const latestTimeout = this.timeoutAlerts
       .filter((item) => item.commandId === delivery.commandId && item.nodeId === delivery.nodeId)
