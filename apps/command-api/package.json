@@ -1,0 +1,32 @@
+{
+  "name": "command-api",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "start": "node dist/main.js",
+    "start:dev": "nest start --watch",
+    "build": "nest build",
+    "lint": "eslint \"src/**/*.ts\"",
+    "test": "echo 'command-api test: no-op'",
+    "format": "prettier --write src"
+  },
+  "dependencies": {
+    "@command-neural/shared-types": "workspace:*",
+    "@nestjs/common": "^11.1.8",
+    "@nestjs/core": "^11.1.8",
+    "@nestjs/platform-express": "^11.1.8",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^11.0.10",
+    "@nestjs/schematics": "^11.0.7",
+    "@nestjs/testing": "^11.1.8",
+    "@types/express": "^5.0.1",
+    "@types/node": "^22.14.0",
+    "@typescript-eslint/eslint-plugin": "^8.26.1",
+    "@typescript-eslint/parser": "^8.26.1",
+    "eslint": "^9.22.0",
+    "typescript": "^5.8.2"
+  }
+}

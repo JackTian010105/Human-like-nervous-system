@@ -1,0 +1,17 @@
+{
+  "name": "@command-neural/shared-config",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "echo 'shared-config build: no-op'",
+    "lint": "echo 'shared-config lint: no-op'",
+    "test": "echo 'shared-config test: no-op'",
+    "format": "echo 'shared-config format: no-op'"
+  },
+  "files": [
+    "eslint.base.cjs",
+    "prettier.base.cjs",
+    "tsconfig.node.json",
+    "tsconfig.next.json"
+  ]
+}

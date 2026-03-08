@@ -1,0 +1,13 @@
+{
+  "name": "@command-neural/shared-types",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.js",
+  "types": "index.d.ts",
+  "scripts": {
+    "build": "echo 'shared-types build: no-op'",
+    "lint": "echo 'shared-types lint: no-op'",
+    "test": "echo 'shared-types test: no-op'",
+    "format": "echo 'shared-types format: no-op'"
+  }
+}
