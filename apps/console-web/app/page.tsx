@@ -136,6 +136,7 @@ export default function HomePage() {
       timestamp: string;
     }[]
   >([]);
+  const timelineSectionRef = useRef<HTMLElement | null>(null);
   const [operationsSeverity, setOperationsSeverity] = useState<"ALL" | "CRITICAL" | "HIGH" | "MEDIUM">(
     "ALL"
   );
@@ -767,22 +768,33 @@ export default function HomePage() {
     setExceptionDetail(payload.detail);
   };
 
-  const queryTimeline = async () => {
+  const queryTimeline = async (preset?: {
+    commandId?: string;
+    nodeId?: string;
+    eventType?: string;
+    from?: string;
+    to?: string;
+  }) => {
+    const commandId = preset?.commandId ?? timelineCommandId;
+    const nodeId = preset?.nodeId ?? timelineNodeId;
+    const eventType = preset?.eventType ?? timelineEventType;
+    const from = preset?.from ?? timelineFrom;
+    const to = preset?.to ?? timelineTo;
     const params = new URLSearchParams();
-    if (timelineCommandId) {
-      params.set("commandId", timelineCommandId);
+    if (commandId) {
+      params.set("commandId", commandId);
     }
-    if (timelineNodeId) {
-      params.set("nodeId", timelineNodeId);
+    if (nodeId) {
+      params.set("nodeId", nodeId);
     }
-    if (timelineEventType) {
-      params.set("eventType", timelineEventType);
+    if (eventType) {
+      params.set("eventType", eventType);
     }
-    if (timelineFrom) {
-      params.set("from", timelineFrom);
+    if (from) {
+      params.set("from", from);
     }
-    if (timelineTo) {
-      params.set("to", timelineTo);
+    if (to) {
+      params.set("to", to);
     }
 
     const response = await fetch(`${apiBase}/commands/audit/timeline?${params.toString()}`);
@@ -800,6 +812,26 @@ export default function HomePage() {
       }[];
     };
     setTimelineEvents(payload.events);
+  };
+
+  const jumpExceptionToTimeline = async () => {
+    if (!exceptionDetail) {
+      return;
+    }
+    const eventType = exceptionDetail.recentError === "N/A" ? "" : "TimeoutDetected";
+    setTimelineCommandId(exceptionDetail.commandId);
+    setTimelineNodeId(exceptionDetail.nodeId);
+    setTimelineEventType(eventType);
+    setTimelineFrom("");
+    setTimelineTo("");
+    await queryTimeline({
+      commandId: exceptionDetail.commandId,
+      nodeId: exceptionDetail.nodeId,
+      eventType,
+      from: "",
+      to: ""
+    });
+    timelineSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   const loadOperationsHealthPanel = async () => {
@@ -1874,6 +1906,9 @@ export default function HomePage() {
             <p>Current Status: {exceptionDetail.currentStatus}</p>
             <p>Last Event At: {exceptionDetail.lastEventAt}</p>
             <p>Recent Error: {exceptionDetail.recentError}</p>
+            <button type="button" onClick={jumpExceptionToTimeline}>
+              跳转相关时间线
+            </button>
           </div>
         ) : null}
       </section>
@@ -1893,7 +1928,7 @@ export default function HomePage() {
         </ul>
       </section>
 
-      <section style={{ marginTop: 24 }}>
+      <section style={{ marginTop: 24 }} ref={timelineSectionRef}>
         <h2>审计时间线检索（Story 5.2）</h2>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
           <input
@@ -1922,7 +1957,7 @@ export default function HomePage() {
             onChange={(event) => setTimelineTo(event.target.value)}
           />
         </div>
-        <button type="button" onClick={queryTimeline}>
+        <button type="button" onClick={() => void queryTimeline()}>
           查询时间线
         </button>
         <ul>
