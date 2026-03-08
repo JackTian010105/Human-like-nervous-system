@@ -875,7 +875,7 @@ export default function HomePage() {
     timelineSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
-  const loadOperationsHealthPanel = async () => {
+  const loadOperationsHealthPanel = useCallback(async () => {
     const params = new URLSearchParams();
     if (operationsSeverity !== "ALL") {
       params.set("severity", operationsSeverity);
@@ -906,7 +906,11 @@ export default function HomePage() {
       };
     };
     setOperationsPanel(payload.panel);
-  };
+  }, [apiBase, operationsSeverity]);
+
+  useEffect(() => {
+    void loadOperationsHealthPanel();
+  }, [loadOperationsHealthPanel]);
 
   const jumpToAlertTarget = async (commandId: string, nodeId: string) => {
     setQueryId(commandId);
