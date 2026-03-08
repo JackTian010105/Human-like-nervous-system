@@ -20,6 +20,7 @@
     "test:next-round-creation": "bash infrastructure/scripts/next-round-creation-smoke.sh",
     "test:audit-timeline-pagination": "bash infrastructure/scripts/audit-timeline-pagination-smoke.sh",
     "test:node-ops-recovery": "bash infrastructure/scripts/node-ops-recovery-smoke.sh",
+    "test:full-drill": "bash infrastructure/scripts/full-regression-drill.sh",
     "e2e:external-integration": "bash infrastructure/scripts/external-integration-e2e.sh",
     "regression:db-persistence": "bash infrastructure/scripts/db-persistence-regression.sh"
   },
