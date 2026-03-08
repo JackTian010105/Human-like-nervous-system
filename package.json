@@ -16,6 +16,7 @@
     "test:timeout-recovery": "bash infrastructure/scripts/timeout-recovery-smoke.sh",
     "test:execution-feedback-idempotency": "bash infrastructure/scripts/execution-feedback-idempotency-smoke.sh",
     "test:feedback-aggregation-idempotency": "bash infrastructure/scripts/feedback-aggregation-idempotency-smoke.sh",
+    "test:closure-state-machine": "bash infrastructure/scripts/closure-state-machine-smoke.sh",
     "e2e:external-integration": "bash infrastructure/scripts/external-integration-e2e.sh",
     "regression:db-persistence": "bash infrastructure/scripts/db-persistence-regression.sh"
   },

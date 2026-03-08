@@ -458,6 +458,11 @@ export class CommandsService implements OnModuleInit {
       delivery.nodeStatus = "UNDERSTOOD";
     }
     this.upsertNodeDelivery(delivery);
+    const command = this.findCommand(params.commandId);
+    if (command && this.canTransition(command.status, "FEEDBACK_RETURNING")) {
+      command.status = "FEEDBACK_RETURNING";
+      void this.databaseService.upsertCommand(command).catch(() => undefined);
+    }
     this.markTimeoutRecoveredIfNeeded(delivery, "ExecutionReported");
     this.emitRealtime(params.commandId, "ExecutionReported", {
       nodeId: params.nodeId,
@@ -518,6 +523,11 @@ export class CommandsService implements OnModuleInit {
       return previous;
     }
     this.feedbackAggregationSnapshot.set(snapshotKey, summary);
+    const command = this.findCommand(params.commandId);
+    if (command && this.canTransition(command.status, "FEEDBACK_RETURNING")) {
+      command.status = "FEEDBACK_RETURNING";
+      void this.databaseService.upsertCommand(command).catch(() => undefined);
+    }
     this.emitRealtime(params.commandId, "FeedbackReturned", {
       fromNodeId: params.fromNodeId,
       completedCount: summary.completedCount,
@@ -559,12 +569,25 @@ export class CommandsService implements OnModuleInit {
     }
 
     if (unmetConditions.length === 0) {
-      command.status = "CLOSED";
-      command.closedAt = evaluatedAt;
-      this.emitRealtime(command.commandId, "CommandClosed", {
-        status: command.status
-      });
-      void this.databaseService.upsertCommand(command).catch(() => undefined);
+      if (!this.canTransition(command.status, "CLOSED")) {
+        const reason = `illegal_status_transition:${command.status}->CLOSED`;
+        this.emitRealtime(command.commandId, "StateTransitionRejected", { reason });
+        return {
+          commandId,
+          status: command.status,
+          isClosed: command.status === "CLOSED",
+          unmetConditions: [reason],
+          evaluatedAt
+        };
+      }
+      if (command.status !== "CLOSED") {
+        command.status = "CLOSED";
+        command.closedAt = evaluatedAt;
+        this.emitRealtime(command.commandId, "CommandClosed", {
+          status: command.status
+        });
+        void this.databaseService.upsertCommand(command).catch(() => undefined);
+      }
       return {
         commandId,
         status: command.status,
@@ -574,11 +597,24 @@ export class CommandsService implements OnModuleInit {
       };
     }
 
-    command.status = "FEEDBACK_RETURNING";
-    this.emitRealtime(command.commandId, "ClosureEvaluatedPending", {
-      unmetConditions
-    });
-    void this.databaseService.upsertCommand(command).catch(() => undefined);
+    if (!this.canTransition(command.status, "FEEDBACK_RETURNING")) {
+      const reason = `illegal_status_transition:${command.status}->FEEDBACK_RETURNING`;
+      this.emitRealtime(command.commandId, "StateTransitionRejected", { reason, unmetConditions });
+      return {
+        commandId,
+        status: command.status,
+        isClosed: command.status === "CLOSED",
+        unmetConditions: [reason, ...unmetConditions],
+        evaluatedAt
+      };
+    }
+    if (command.status !== "FEEDBACK_RETURNING") {
+      command.status = "FEEDBACK_RETURNING";
+      this.emitRealtime(command.commandId, "ClosureEvaluatedPending", {
+        unmetConditions
+      });
+      void this.databaseService.upsertCommand(command).catch(() => undefined);
+    }
     return {
       commandId,
       status: command.status,
@@ -1248,6 +1284,22 @@ export class CommandsService implements OnModuleInit {
       return false;
     }
     return previous.pendingNodeIds.every((nodeId, index) => nodeId === next.pendingNodeIds[index]);
+  }
+
+  private canTransition(from: CommandRecord["status"], to: CommandRecord["status"]): boolean {
+    if (from === to) {
+      return true;
+    }
+    if (from === "CREATED" && to === "DISPATCHED_PENDING_RECEIVE") {
+      return true;
+    }
+    if (from === "DISPATCHED_PENDING_RECEIVE" && to === "FEEDBACK_RETURNING") {
+      return true;
+    }
+    if (from === "FEEDBACK_RETURNING" && to === "CLOSED") {
+      return true;
+    }
+    return false;
   }
 
   private syncRootNodeAvailability(profile: NodeProfile): void {
