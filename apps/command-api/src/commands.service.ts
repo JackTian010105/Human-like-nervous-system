@@ -407,10 +407,20 @@ export class CommandsService implements OnModuleInit {
       return undefined;
     }
 
+    const normalizedQuestion = params.question?.trim() || undefined;
+    const isSameReceipt =
+      delivery.nodeStatus === "UNDERSTOOD" &&
+      delivery.understandingStatus === params.understandingStatus &&
+      (delivery.understandingQuestion ?? undefined) === normalizedQuestion;
+    if (isSameReceipt) {
+      return this.toNodeCommandCard(delivery);
+    }
+
     delivery.nodeStatus = "UNDERSTOOD";
     delivery.understandingStatus = params.understandingStatus;
-    delivery.understandingQuestion = params.question;
+    delivery.understandingQuestion = normalizedQuestion;
     delivery.understoodAt = new Date().toISOString();
+    this.upsertNodeDelivery(delivery);
     this.emitRealtime(params.commandId, "UnderstandingSubmitted", {
       nodeId: params.nodeId,
       understandingStatus: params.understandingStatus
@@ -434,6 +444,7 @@ export class CommandsService implements OnModuleInit {
     delivery.executionStatus = params.executionStatus;
     delivery.executionCompletedAt = new Date().toISOString();
     delivery.executionExceptionNote = params.exceptionNote;
+    this.upsertNodeDelivery(delivery);
     this.emitRealtime(params.commandId, "ExecutionFeedbackSubmitted", {
       nodeId: params.nodeId,
       executionStatus: params.executionStatus
