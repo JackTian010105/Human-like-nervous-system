@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import type {
   BindRootNodeResponse,
   CommandDraft,
@@ -24,6 +24,17 @@ const initialFormState: FormState = {
   executionRequirement: "",
   feedbackRequirement: ""
 };
+
+const commandStatusMeta: Record<string, { label: string; icon: string; color: string }> = {
+  CREATED: { label: "已创建", icon: "●", color: "#6b7280" },
+  DISPATCHED_PENDING_RECEIVE: { label: "已下发/待接收", icon: "⇣", color: "#1d4ed8" },
+  FEEDBACK_RETURNING: { label: "反馈中", icon: "↩", color: "#b45309" },
+  CLOSED: { label: "闭环完成", icon: "✓", color: "#166534" }
+};
+
+function getCommandStatusMeta(status: string): { label: string; icon: string; color: string } {
+  return commandStatusMeta[status] ?? { label: status, icon: "?", color: "#374151" };
+}
 
 export default function HomePage() {
   const apiBase = useMemo(
@@ -339,23 +350,27 @@ export default function HomePage() {
     }
   };
 
-  const loadCommands = async () => {
-    const response = await fetch(`${apiBase}/commands`);
-    if (!response.ok) {
-      return;
+  const loadCommands = useCallback(async () => {
+    try {
+      const response = await fetch(`${apiBase}/commands`);
+      if (!response.ok) {
+        return;
+      }
+      const payload = (await response.json()) as ListCommandsResponse;
+      setCommands(payload.commands);
+    } catch {
+      // ignore network error, keep previous snapshot
     }
-    const payload = (await response.json()) as ListCommandsResponse;
-    setCommands(payload.commands);
-  };
+  }, [apiBase]);
 
-  const loadCommandDetail = async (commandId: string) => {
+  const loadCommandDetail = useCallback(async (commandId: string) => {
     const response = await fetch(`${apiBase}/commands/${commandId}`);
     if (!response.ok) {
       return;
     }
     const payload = (await response.json()) as { command: CommandRecord };
     setSelectedCommand(payload.command);
-  };
+  }, [apiBase]);
 
   const evaluateClosure = async () => {
     if (!selectedCommand) {
@@ -434,6 +449,12 @@ export default function HomePage() {
     const byStatus = statusFilter === "ALL" ? true : item.status === statusFilter;
     return byId && byStatus;
   });
+  const statusFilterOptions = useMemo(() => {
+    const preferred = ["CREATED", "DISPATCHED_PENDING_RECEIVE", "FEEDBACK_RETURNING", "CLOSED"];
+    const existing = Array.from(new Set(commands.map((item) => item.status)));
+    const merged = Array.from(new Set([...preferred, ...existing]));
+    return ["ALL", ...merged];
+  }, [commands]);
 
   const loadNodeCommands = async () => {
     setNodeWorkbenchError("");
@@ -977,9 +998,17 @@ export default function HomePage() {
   };
 
   useEffect(() => {
+    void loadCommands();
+  }, [loadCommands]);
+
+  useEffect(() => {
     const eventSource = new EventSource(`${apiBase}/commands/realtime/stream`);
     eventSource.onopen = () => {
       setRealtimeConnected(true);
+      void loadCommands();
+      if (selectedCommand?.commandId) {
+        void loadCommandDetail(selectedCommand.commandId);
+      }
     };
     eventSource.onmessage = (event) => {
       try {
@@ -990,6 +1019,10 @@ export default function HomePage() {
           timestamp: string;
         };
         setRealtimeEvents((prev) => [data, ...prev].slice(0, 20));
+        void loadCommands();
+        if (selectedCommand?.commandId === data.commandId) {
+          void loadCommandDetail(selectedCommand.commandId);
+        }
       } catch {
         // ignore malformed event
       }
@@ -1001,7 +1034,20 @@ export default function HomePage() {
       eventSource.close();
       setRealtimeConnected(false);
     };
-  }, [apiBase]);
+  }, [apiBase, loadCommandDetail, loadCommands, selectedCommand?.commandId]);
+
+  useEffect(() => {
+    if (realtimeConnected) {
+      return;
+    }
+    const timer = setInterval(() => {
+      void loadCommands();
+      if (selectedCommand?.commandId) {
+        void loadCommandDetail(selectedCommand.commandId);
+      }
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [loadCommandDetail, loadCommands, realtimeConnected, selectedCommand?.commandId]);
 
   return (
     <main style={{ fontFamily: "sans-serif", padding: 24, maxWidth: 720 }}>
@@ -1254,15 +1300,18 @@ export default function HomePage() {
             value={statusFilter}
             onChange={(event) => setStatusFilter(event.target.value)}
           >
-            <option value="ALL">全部</option>
-            <option value="CREATED">CREATED</option>
-            <option value="DISPATCHED_PENDING_RECEIVE">DISPATCHED_PENDING_RECEIVE</option>
+            {statusFilterOptions.map((status) => (
+              <option key={status} value={status}>
+                {status === "ALL" ? "全部" : status}
+              </option>
+            ))}
           </select>
         </div>
         <ul>
           {filteredCommands.map((item) => (
             <li key={item.commandId} style={{ marginBottom: 8 }}>
-              <strong>{item.commandId}</strong> - {item.status} - issuer: {item.issuerId}
+              <strong>{item.commandId}</strong> - <StatusBadge status={item.status} /> - issuer:{" "}
+              {item.issuerId}
               <button
                 type="button"
                 style={{ marginLeft: 8 }}
@@ -1277,7 +1326,9 @@ export default function HomePage() {
           <div style={{ marginTop: 12 }}>
             <h3>指令详情</h3>
             <p>CommandID: {selectedCommand.commandId}</p>
-            <p>Status: {selectedCommand.status}</p>
+            <p>
+              Status: <StatusBadge status={selectedCommand.status} />
+            </p>
             <p>Issuer: {selectedCommand.issuerId}</p>
             <p>Root Node: {selectedCommand.rootNodeId ?? "-"}</p>
             <p>Created At: {selectedCommand.createdAt}</p>
@@ -1761,7 +1812,9 @@ export default function HomePage() {
 
       <section style={{ marginTop: 24 }}>
         <h2>实时事件流（SSE）</h2>
-        <p>连接状态: {realtimeConnected ? "已连接" : "未连接/重连中"}</p>
+        <p aria-live="polite">
+          连接状态: {realtimeConnected ? "已连接" : "未连接/重连中（已启用每秒状态回补）"}
+        </p>
         <ul>
           {realtimeEvents.map((event) => (
             <li key={`${event.commandId}-${event.eventSequence}-${event.timestamp}`}>
@@ -1845,5 +1898,26 @@ function Field(props: {
         </p>
       ) : null}
     </div>
+  );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const meta = getCommandStatusMeta(status);
+  return (
+    <span
+      aria-label={`状态 ${meta.label}`}
+      title={status}
+      style={{
+        display: "inline-block",
+        padding: "2px 8px",
+        borderRadius: 999,
+        border: `1px solid ${meta.color}`,
+        color: meta.color,
+        fontSize: 12,
+        lineHeight: "18px"
+      }}
+    >
+      {meta.icon} {meta.label}
+    </span>
   );
 }
