@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   BindRootNodeResponse,
   CommandDraft,
@@ -87,6 +87,7 @@ export default function HomePage() {
   const [realtimeEvents, setRealtimeEvents] = useState<
     { commandId: string; eventType: string; eventSequence: number; timestamp: string }[]
   >([]);
+  const latestEventSequenceRef = useRef<Map<string, number>>(new Map());
   const [nodeWorkbenchNodeId, setNodeWorkbenchNodeId] = useState("captain-A");
   const [nodeCommands, setNodeCommands] = useState<NodeCommandCard[]>([]);
   const [selectedNodeCommand, setSelectedNodeCommand] = useState<NodeCommandCard | null>(null);
@@ -370,6 +371,68 @@ export default function HomePage() {
     }
     const payload = (await response.json()) as { command: CommandRecord };
     setSelectedCommand(payload.command);
+  }, [apiBase]);
+
+  const applyRealtimeEvent = useCallback(
+    (event: { commandId: string; eventType: string; eventSequence: number; timestamp: string }) => {
+      const current = latestEventSequenceRef.current.get(event.commandId) ?? 0;
+      if (event.eventSequence <= current) {
+        return;
+      }
+      latestEventSequenceRef.current.set(event.commandId, event.eventSequence);
+      setRealtimeEvents((prev) => [event, ...prev].slice(0, 20));
+      void loadCommands();
+      if (selectedCommand?.commandId === event.commandId) {
+        void loadCommandDetail(selectedCommand.commandId);
+      }
+    },
+    [loadCommandDetail, loadCommands, selectedCommand?.commandId]
+  );
+
+  const hydrateRealtimeSnapshot = useCallback(async () => {
+    try {
+      const response = await fetch(`${apiBase}/commands/audit/events`);
+      if (!response.ok) {
+        return;
+      }
+      const payload = (await response.json()) as {
+        events: {
+          commandId: string;
+          eventType: string;
+          eventSequence: number;
+          timestamp: string;
+        }[];
+      };
+      const nextSeqMap = new Map<string, number>();
+      payload.events.forEach((event) => {
+        const current = nextSeqMap.get(event.commandId) ?? 0;
+        if (event.eventSequence > current) {
+          nextSeqMap.set(event.commandId, event.eventSequence);
+        }
+      });
+      latestEventSequenceRef.current = nextSeqMap;
+      const recent = [...payload.events]
+        .sort((a, b) => {
+          const byTime = b.timestamp.localeCompare(a.timestamp);
+          if (byTime !== 0) {
+            return byTime;
+          }
+          if (a.commandId === b.commandId) {
+            return b.eventSequence - a.eventSequence;
+          }
+          return b.commandId.localeCompare(a.commandId);
+        })
+        .slice(0, 20)
+        .map((event) => ({
+          commandId: event.commandId,
+          eventType: event.eventType,
+          eventSequence: event.eventSequence,
+          timestamp: event.timestamp
+        }));
+      setRealtimeEvents(recent);
+    } catch {
+      // ignore replay errors and keep live stream only
+    }
   }, [apiBase]);
 
   const evaluateClosure = async () => {
@@ -1002,6 +1065,7 @@ export default function HomePage() {
   }, [loadCommands]);
 
   useEffect(() => {
+    void hydrateRealtimeSnapshot();
     const eventSource = new EventSource(`${apiBase}/commands/realtime/stream`);
     eventSource.onopen = () => {
       setRealtimeConnected(true);
@@ -1018,11 +1082,7 @@ export default function HomePage() {
           eventSequence: number;
           timestamp: string;
         };
-        setRealtimeEvents((prev) => [data, ...prev].slice(0, 20));
-        void loadCommands();
-        if (selectedCommand?.commandId === data.commandId) {
-          void loadCommandDetail(selectedCommand.commandId);
-        }
+        applyRealtimeEvent(data);
       } catch {
         // ignore malformed event
       }
@@ -1034,7 +1094,14 @@ export default function HomePage() {
       eventSource.close();
       setRealtimeConnected(false);
     };
-  }, [apiBase, loadCommandDetail, loadCommands, selectedCommand?.commandId]);
+  }, [
+    apiBase,
+    applyRealtimeEvent,
+    hydrateRealtimeSnapshot,
+    loadCommandDetail,
+    loadCommands,
+    selectedCommand?.commandId
+  ]);
 
   useEffect(() => {
     if (realtimeConnected) {
@@ -1045,9 +1112,10 @@ export default function HomePage() {
       if (selectedCommand?.commandId) {
         void loadCommandDetail(selectedCommand.commandId);
       }
+      void hydrateRealtimeSnapshot();
     }, 1000);
     return () => clearInterval(timer);
-  }, [loadCommandDetail, loadCommands, realtimeConnected, selectedCommand?.commandId]);
+  }, [hydrateRealtimeSnapshot, loadCommandDetail, loadCommands, realtimeConnected, selectedCommand?.commandId]);
 
   return (
     <main style={{ fontFamily: "sans-serif", padding: 24, maxWidth: 720 }}>
@@ -1815,6 +1883,7 @@ export default function HomePage() {
         <p aria-live="polite">
           连接状态: {realtimeConnected ? "已连接" : "未连接/重连中（已启用每秒状态回补）"}
         </p>
+        <p>事件应用策略: 同一 Command 按 EventSequence 去重并按序应用。</p>
         <ul>
           {realtimeEvents.map((event) => (
             <li key={`${event.commandId}-${event.eventSequence}-${event.timestamp}`}>
