@@ -10,6 +10,7 @@
     "test": "pnpm -r --if-present run test",
     "format": "prettier --write .",
     "verify:callback-signature": "node infrastructure/scripts/verify-callback-signature.mjs",
+    "test:core-command-flow": "bash infrastructure/scripts/core-command-flow-smoke.sh",
     "e2e:external-integration": "bash infrastructure/scripts/external-integration-e2e.sh",
     "regression:db-persistence": "bash infrastructure/scripts/db-persistence-regression.sh"
   },

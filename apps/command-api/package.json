@@ -7,7 +7,7 @@
     "start:dev": "nest start --watch",
     "build": "nest build",
     "lint": "eslint \"src/**/*.ts\"",
-    "test": "echo 'command-api test: no-op'",
+    "test": "bash ../../infrastructure/scripts/core-command-flow-smoke.sh",
     "format": "prettier --write src"
   },
   "dependencies": {
