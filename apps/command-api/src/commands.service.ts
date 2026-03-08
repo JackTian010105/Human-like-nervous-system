@@ -94,6 +94,7 @@ export class CommandsService implements OnModuleInit {
   >();
   private readonly callbackSubscriptions: ExternalCallbackSubscription[] = [];
   private readonly callbackDeliveries: CallbackDeliveryRecord[] = [];
+  private readonly feedbackAggregationSnapshot = new Map<string, FeedbackAggregationSummary>();
   private readonly nodeProfiles = new Map<string, NodeProfile>();
 
   constructor(private readonly databaseService: DatabaseService) {
@@ -501,7 +502,7 @@ export class CommandsService implements OnModuleInit {
       exceptionCount += 1;
     });
 
-    return {
+    const summary: FeedbackAggregationSummary = {
       commandId: params.commandId,
       fromNodeId: params.fromNodeId,
       completedCount,
@@ -511,6 +512,22 @@ export class CommandsService implements OnModuleInit {
       pendingNodeIds,
       aggregatedAt: new Date().toISOString()
     };
+    const snapshotKey = `${params.commandId}:${params.fromNodeId}`;
+    const previous = this.feedbackAggregationSnapshot.get(snapshotKey);
+    if (previous && this.isSameFeedbackAggregation(previous, summary)) {
+      return previous;
+    }
+    this.feedbackAggregationSnapshot.set(snapshotKey, summary);
+    this.emitRealtime(params.commandId, "FeedbackReturned", {
+      fromNodeId: params.fromNodeId,
+      completedCount: summary.completedCount,
+      notCompletedCount: summary.notCompletedCount,
+      exceptionCount: summary.exceptionCount,
+      pendingCount: summary.pendingCount,
+      pendingNodeIds: summary.pendingNodeIds,
+      aggregatedAt: summary.aggregatedAt
+    });
+    return summary;
   }
 
   evaluateClosure(commandId: string): EvaluateClosureResponse {
@@ -1210,6 +1227,27 @@ export class CommandsService implements OnModuleInit {
       timeoutType: latestTimeout.timeoutType,
       recoveredByEventType
     });
+  }
+
+  private isSameFeedbackAggregation(
+    previous: FeedbackAggregationSummary,
+    next: FeedbackAggregationSummary
+  ): boolean {
+    if (previous.commandId !== next.commandId || previous.fromNodeId !== next.fromNodeId) {
+      return false;
+    }
+    if (
+      previous.completedCount !== next.completedCount ||
+      previous.notCompletedCount !== next.notCompletedCount ||
+      previous.exceptionCount !== next.exceptionCount ||
+      previous.pendingCount !== next.pendingCount
+    ) {
+      return false;
+    }
+    if (previous.pendingNodeIds.length !== next.pendingNodeIds.length) {
+      return false;
+    }
+    return previous.pendingNodeIds.every((nodeId, index) => nodeId === next.pendingNodeIds[index]);
   }
 
   private syncRootNodeAvailability(profile: NodeProfile): void {
