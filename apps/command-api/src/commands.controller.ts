@@ -366,10 +366,10 @@ export class CommandsController {
         commandId
       });
     }
-    if (fromNodeCommand.nodeStatus !== "UNDERSTOOD") {
+    if (fromNodeCommand.nodeStatus !== "UNDERSTOOD" && fromNodeCommand.nodeStatus !== "ANOMALY_TIMEOUT") {
       throw new BadRequestException({
         message: "Validation failed",
-        errors: { commandId: "command must be UNDERSTOOD before propagation" }
+        errors: { commandId: "command must be UNDERSTOOD (or ANOMALY_TIMEOUT for recovery) before propagation" }
       });
     }
 

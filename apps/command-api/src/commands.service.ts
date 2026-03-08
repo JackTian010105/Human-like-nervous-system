@@ -421,6 +421,7 @@ export class CommandsService implements OnModuleInit {
     delivery.understandingQuestion = normalizedQuestion;
     delivery.understoodAt = new Date().toISOString();
     this.upsertNodeDelivery(delivery);
+    this.markTimeoutRecoveredIfNeeded(delivery, "UnderstandingSubmitted");
     this.emitRealtime(params.commandId, "UnderstandingSubmitted", {
       nodeId: params.nodeId,
       understandingStatus: params.understandingStatus
@@ -444,7 +445,11 @@ export class CommandsService implements OnModuleInit {
     delivery.executionStatus = params.executionStatus;
     delivery.executionCompletedAt = new Date().toISOString();
     delivery.executionExceptionNote = params.exceptionNote;
+    if (delivery.nodeStatus === "ANOMALY_TIMEOUT") {
+      delivery.nodeStatus = "UNDERSTOOD";
+    }
     this.upsertNodeDelivery(delivery);
+    this.markTimeoutRecoveredIfNeeded(delivery, "ExecutionFeedbackSubmitted");
     this.emitRealtime(params.commandId, "ExecutionFeedbackSubmitted", {
       nodeId: params.nodeId,
       executionStatus: params.executionStatus
@@ -755,6 +760,14 @@ export class CommandsService implements OnModuleInit {
     const allowedTargets = new Set(this.listDownstreamCandidates(params.fromNodeId));
     const propagated: PropagateCommandResponse["propagated"] = [];
     const invalidTargets: string[] = [];
+    const fromNodeDelivery = this.nodeDeliveries.find(
+      (item) => item.commandId === params.commandId && item.nodeId === params.fromNodeId
+    );
+    if (fromNodeDelivery?.nodeStatus === "ANOMALY_TIMEOUT") {
+      fromNodeDelivery.nodeStatus = "UNDERSTOOD";
+      this.upsertNodeDelivery(fromNodeDelivery);
+      this.markTimeoutRecoveredIfNeeded(fromNodeDelivery, "CommandPropagated");
+    }
 
     params.targetNodeIds.forEach((targetNodeId) => {
       if (!allowedTargets.has(targetNodeId)) {
@@ -835,6 +848,7 @@ export class CommandsService implements OnModuleInit {
       }
 
       delivery.nodeStatus = "ANOMALY_TIMEOUT";
+      this.upsertNodeDelivery(delivery);
       const alert: TimeoutAlert = {
         commandId: delivery.commandId,
         nodeId: delivery.nodeId,
@@ -1159,6 +1173,33 @@ export class CommandsService implements OnModuleInit {
       default:
         return 1;
     }
+  }
+
+  private markTimeoutRecoveredIfNeeded(
+    delivery: NodeDelivery,
+    recoveredByEventType: "UnderstandingSubmitted" | "ExecutionFeedbackSubmitted" | "CommandPropagated"
+  ): void {
+    const latestTimeout = this.timeoutAlerts
+      .filter((item) => item.commandId === delivery.commandId && item.nodeId === delivery.nodeId)
+      .sort((a, b) => b.detectedAt.localeCompare(a.detectedAt))[0];
+    if (!latestTimeout) {
+      return;
+    }
+    const alreadyRecovered = this.auditEvents.find(
+      (event) =>
+        event.commandId === delivery.commandId &&
+        event.nodeId === delivery.nodeId &&
+        event.eventType === "TimeoutRecovered" &&
+        String(event.payload.timeoutType) === latestTimeout.timeoutType
+    );
+    if (alreadyRecovered) {
+      return;
+    }
+    this.emitRealtime(delivery.commandId, "TimeoutRecovered", {
+      nodeId: delivery.nodeId,
+      timeoutType: latestTimeout.timeoutType,
+      recoveredByEventType
+    });
   }
 
   private syncRootNodeAvailability(profile: NodeProfile): void {

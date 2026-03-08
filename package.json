@@ -13,6 +13,7 @@
     "test:core-command-flow": "bash infrastructure/scripts/core-command-flow-smoke.sh",
     "test:understanding-idempotency": "bash infrastructure/scripts/understanding-idempotency-smoke.sh",
     "test:propagation-idempotency": "bash infrastructure/scripts/propagation-idempotency-smoke.sh",
+    "test:timeout-recovery": "bash infrastructure/scripts/timeout-recovery-smoke.sh",
     "e2e:external-integration": "bash infrastructure/scripts/external-integration-e2e.sh",
     "regression:db-persistence": "bash infrastructure/scripts/db-persistence-regression.sh"
   },
