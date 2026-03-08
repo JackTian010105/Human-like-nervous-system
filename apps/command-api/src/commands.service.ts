@@ -254,6 +254,21 @@ export class CommandsService implements OnModuleInit {
     this.emitRealtime("SYSTEM", "ExternalAuthRejected", payload);
   }
 
+  recordNodeAccessDenied(payload: {
+    nodeId: string;
+    requesterNodeId?: string;
+    commandId?: string;
+    reason: "node_not_found" | "node_mismatch";
+  }): void {
+    const authorityCommandId = payload.commandId?.trim() || "SYSTEM";
+    this.emitRealtime(authorityCommandId, "NodeAccessDenied", {
+      nodeId: payload.nodeId,
+      requesterNodeId: payload.requesterNodeId,
+      commandId: payload.commandId,
+      reason: payload.reason
+    });
+  }
+
   findDraft(draftId: string): CommandDraft | undefined {
     return this.drafts.find((item) => item.draftId === draftId);
   }

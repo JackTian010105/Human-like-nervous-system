@@ -121,7 +121,7 @@ export class CommandsController {
     @Param("commandId") commandId: string,
     @Headers("x-node-id") requesterNodeId?: string
   ): GetNodeCommandDetailResponse {
-    this.ensureNodeAccess(nodeId, requesterNodeId);
+    this.ensureNodeAccess(nodeId, requesterNodeId, commandId);
     const command = this.commandsService.getNodeCommand(nodeId, commandId);
     if (!command) {
       throw new NotFoundException({
@@ -270,7 +270,7 @@ export class CommandsController {
     @Body() body: SubmitUnderstandingReceiptRequest,
     @Headers("x-node-id") requesterNodeId?: string
   ): SubmitUnderstandingReceiptResponse {
-    this.ensureNodeAccess(nodeId, requesterNodeId);
+    this.ensureNodeAccess(nodeId, requesterNodeId, commandId);
     const status = body?.understandingStatus;
     if (status !== "UNDERSTOOD" && status !== "NEED_CLARIFICATION") {
       throw new BadRequestException({
@@ -303,7 +303,7 @@ export class CommandsController {
     @Body() body: SubmitExecutionFeedbackRequest,
     @Headers("x-node-id") requesterNodeId?: string
   ): SubmitExecutionFeedbackResponse {
-    this.ensureNodeAccess(nodeId, requesterNodeId);
+    this.ensureNodeAccess(nodeId, requesterNodeId, commandId);
     const status = body?.executionStatus;
     if (status !== "COMPLETED" && status !== "NOT_COMPLETED" && status !== "EXCEPTION") {
       throw new BadRequestException({
@@ -335,7 +335,7 @@ export class CommandsController {
     @Param("commandId") commandId: string,
     @Headers("x-node-id") requesterNodeId?: string
   ): SubmitFeedbackAggregationResponse {
-    this.ensureNodeAccess(nodeId, requesterNodeId);
+    this.ensureNodeAccess(nodeId, requesterNodeId, commandId);
     const summary = this.commandsService.aggregateDownstreamFeedback({
       fromNodeId: nodeId,
       commandId
@@ -350,7 +350,7 @@ export class CommandsController {
     @Body() body: PropagateCommandRequest,
     @Headers("x-node-id") requesterNodeId?: string
   ): PropagateCommandResponse {
-    this.ensureNodeAccess(nodeId, requesterNodeId);
+    this.ensureNodeAccess(nodeId, requesterNodeId, commandId);
     if (!Array.isArray(body?.targetNodeIds) || body.targetNodeIds.length === 0) {
       throw new BadRequestException({
         message: "Validation failed",
@@ -482,15 +482,27 @@ export class CommandsController {
     return result;
   }
 
-  private ensureNodeAccess(nodeId: string, requesterNodeId?: string): void {
+  private ensureNodeAccess(nodeId: string, requesterNodeId?: string, commandId?: string): void {
     const nodeExists = this.commandsService.isKnownNode(nodeId);
     if (!nodeExists) {
+      this.commandsService.recordNodeAccessDenied({
+        nodeId,
+        requesterNodeId,
+        commandId,
+        reason: "node_not_found"
+      });
       throw new ForbiddenException({
         message: "Forbidden node access",
         nodeId
       });
     }
     if (!requesterNodeId || requesterNodeId !== nodeId) {
+      this.commandsService.recordNodeAccessDenied({
+        nodeId,
+        requesterNodeId,
+        commandId,
+        reason: "node_mismatch"
+      });
       throw new ForbiddenException({
         message: "Forbidden node access",
         nodeId
