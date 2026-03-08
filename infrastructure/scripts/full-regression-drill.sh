@@ -25,6 +25,13 @@ for test_cmd in "${TESTS[@]}"; do
   pnpm "${test_cmd}"
 done
 
+if [[ "${RUN_SCALABILITY_BASELINE:-0}" == "1" ]]; then
+  echo "[run] pnpm test:scalability-baseline"
+  pnpm test:scalability-baseline
+else
+  echo "[skip] scalability baseline (set RUN_SCALABILITY_BASELINE=1 to enable)"
+fi
+
 if [[ -n "${DATABASE_URL:-}" && -n "${PSQL_BIN:-}" ]]; then
   :
 else

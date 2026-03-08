@@ -68,6 +68,7 @@ pnpm lint
 pnpm test
 pnpm format
 pnpm verify:callback-signature /tmp/payload.json <signature-hex> <secret>
+pnpm test:scalability-baseline
 pnpm test:full-drill
 pnpm e2e:external-integration
 pnpm regression:db-persistence
