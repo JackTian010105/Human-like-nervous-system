@@ -2,15 +2,52 @@ import {
   BadRequestException,
   Body,
   Controller,
+  ForbiddenException,
+  Get,
   Headers,
+  MessageEvent,
   NotFoundException,
+  Patch,
   Param,
   Post
 } from "@nestjs/common";
+import { Query } from "@nestjs/common";
+import { Sse } from "@nestjs/common";
+import { map, Observable } from "rxjs";
 import type {
+  AuditQuery,
+  BindRootNodeRequest,
+  BindRootNodeResponse,
+  CreateNextRoundCommandRequest,
+  CreateNextRoundCommandResponse,
   CreateCommandDraftResponse,
+  EvaluateClosureResponse,
+  GetOperationsHealthResponse,
+  GetNodeDiagnosticsResponse,
+  GetExceptionNodeDetailResponse,
+  GetCommandChainResponse,
+  ListAuditEventsResponse,
+  EventTimelineResponse,
+  GetCommandResponse,
   IssueCommandResponse,
-  IssueCommandRequest
+  IssueCommandRequest,
+  GetNodeCommandDetailResponse,
+  ListCommandsResponse,
+  ListNodeCommandsResponse,
+  PropagateCommandRequest,
+  PropagateCommandResponse,
+  ListRootNodeCandidatesResponse,
+  ListTimeoutAlertsResponse,
+  SubmitFeedbackAggregationResponse,
+  SubmitUnderstandingReceiptRequest,
+  SubmitUnderstandingReceiptResponse,
+  SubmitExecutionFeedbackRequest,
+  SubmitExecutionFeedbackResponse,
+  TriggerTimeoutScanResponse,
+  TriggerNodeRecoveryRequest,
+  TriggerNodeRecoveryResponse,
+  UpdateNodeConfigRequest,
+  UpdateNodeConfigResponse
 } from "@command-neural/shared-types";
 import { CommandsService } from "./commands.service";
 import { validateCreateCommandDraftRequest } from "./commands.validation";
@@ -32,6 +69,316 @@ export class CommandsController {
 
     const draft = this.commandsService.createDraft(validation.value);
     return { draft };
+  }
+
+  @Get("root-candidates")
+  listRootCandidates(): ListRootNodeCandidatesResponse {
+    return { nodes: this.commandsService.listRootNodeCandidates() };
+  }
+
+  @Get()
+  listCommands(): ListCommandsResponse {
+    return { commands: this.commandsService.listCommands() };
+  }
+
+  @Get(":commandId")
+  getCommand(@Param("commandId") commandId: string): GetCommandResponse {
+    const command = this.commandsService.findCommand(commandId);
+    if (!command) {
+      throw new NotFoundException({
+        message: "Command not found",
+        commandId
+      });
+    }
+
+    return { command };
+  }
+
+  @Get(":commandId/chain")
+  getCommandChain(@Param("commandId") commandId: string): GetCommandChainResponse {
+    const command = this.commandsService.findCommand(commandId);
+    if (!command) {
+      throw new NotFoundException({
+        message: "Command not found",
+        commandId
+      });
+    }
+    return this.commandsService.getCommandChain(commandId);
+  }
+
+  @Get("/nodes/:nodeId/commands")
+  listNodeCommands(
+    @Param("nodeId") nodeId: string,
+    @Headers("x-node-id") requesterNodeId?: string
+  ): ListNodeCommandsResponse {
+    this.ensureNodeAccess(nodeId, requesterNodeId);
+    return { commands: this.commandsService.listNodeCommands(nodeId) };
+  }
+
+  @Get("/nodes/:nodeId/commands/:commandId")
+  getNodeCommand(
+    @Param("nodeId") nodeId: string,
+    @Param("commandId") commandId: string,
+    @Headers("x-node-id") requesterNodeId?: string
+  ): GetNodeCommandDetailResponse {
+    this.ensureNodeAccess(nodeId, requesterNodeId);
+    const command = this.commandsService.getNodeCommand(nodeId, commandId);
+    if (!command) {
+      throw new NotFoundException({
+        message: "Node command not found",
+        nodeId,
+        commandId
+      });
+    }
+
+    return { command };
+  }
+
+  @Get("/nodes/:nodeId/downstream-candidates")
+  listDownstreamCandidates(
+    @Param("nodeId") nodeId: string,
+    @Headers("x-node-id") requesterNodeId?: string
+  ): { nodeIds: string[] } {
+    this.ensureNodeAccess(nodeId, requesterNodeId);
+    return { nodeIds: this.commandsService.listDownstreamCandidates(nodeId) };
+  }
+
+  @Get("/alerts/timeouts")
+  listTimeoutAlerts(): ListTimeoutAlertsResponse {
+    return { alerts: this.commandsService.listTimeoutAlerts() };
+  }
+
+  @Get("/alerts/timeouts/:commandId/:nodeId")
+  getExceptionNodeDetail(
+    @Param("commandId") commandId: string,
+    @Param("nodeId") nodeId: string
+  ): GetExceptionNodeDetailResponse {
+    const detail = this.commandsService.getExceptionNodeDetail(commandId, nodeId);
+    if (!detail) {
+      throw new NotFoundException({
+        message: "Exception node detail not found",
+        commandId,
+        nodeId
+      });
+    }
+    return { detail };
+  }
+
+  @Get("/audit/events")
+  listAuditEvents(): ListAuditEventsResponse {
+    return { events: this.commandsService.listAuditEvents() };
+  }
+
+  @Get(":commandId/audit/events")
+  listCommandAuditEvents(@Param("commandId") commandId: string): ListAuditEventsResponse {
+    return { events: this.commandsService.listAuditEvents(commandId) };
+  }
+
+  @Get("/audit/timeline")
+  getAuditTimeline(
+    @Query("commandId") commandId?: string,
+    @Query("nodeId") nodeId?: string,
+    @Query("eventType") eventType?: string,
+    @Query("from") from?: string,
+    @Query("to") to?: string
+  ): EventTimelineResponse {
+    const query: AuditQuery = {
+      commandId: commandId?.trim() || undefined,
+      nodeId: nodeId?.trim() || undefined,
+      eventType: eventType?.trim() || undefined,
+      from: from?.trim() || undefined,
+      to: to?.trim() || undefined
+    };
+    return { events: this.commandsService.queryAuditEvents(query) };
+  }
+
+  @Get("/operations/health")
+  getOperationsHealth(
+    @Query("severity") severity?: "CRITICAL" | "HIGH" | "MEDIUM"
+  ): GetOperationsHealthResponse {
+    return this.commandsService.getOperationsHealthPanel(severity);
+  }
+
+  @Patch("/nodes/:nodeId/config")
+  updateNodeConfig(
+    @Param("nodeId") nodeId: string,
+    @Body() body: UpdateNodeConfigRequest,
+    @Headers("x-operator-role") operatorRole?: string
+  ): UpdateNodeConfigResponse {
+    this.ensureOperatorRole(operatorRole, ["GUANNING", "SUNWU"]);
+    const updated = this.commandsService.updateNodeConfig(nodeId, body);
+    if (!updated) {
+      throw new NotFoundException({
+        message: "Node not found",
+        nodeId
+      });
+    }
+    return updated;
+  }
+
+  @Get("/nodes/:nodeId/diagnostics")
+  getNodeDiagnostics(
+    @Param("nodeId") nodeId: string,
+    @Headers("x-operator-role") operatorRole?: string
+  ): GetNodeDiagnosticsResponse {
+    this.ensureOperatorRole(operatorRole, ["GUANNING", "BIANQUE"]);
+    const diagnostics = this.commandsService.getNodeDiagnostics(nodeId);
+    if (!diagnostics) {
+      throw new NotFoundException({
+        message: "Node not found",
+        nodeId
+      });
+    }
+    return diagnostics;
+  }
+
+  @Post("/nodes/:nodeId/recovery")
+  triggerNodeRecovery(
+    @Param("nodeId") nodeId: string,
+    @Body() body: TriggerNodeRecoveryRequest,
+    @Headers("x-operator-role") operatorRole?: string
+  ): TriggerNodeRecoveryResponse {
+    this.ensureOperatorRole(operatorRole, ["BIANQUE", "GUANNING"]);
+    const result = this.commandsService.triggerNodeRecovery(nodeId, body ?? {});
+    if (!result) {
+      throw new NotFoundException({
+        message: "Node not found",
+        nodeId
+      });
+    }
+    return result;
+  }
+
+  @Sse("realtime/stream")
+  realtimeStream(): Observable<MessageEvent> {
+    return this.commandsService.getRealtimeStream().pipe(
+      map((event) => ({
+        data: event
+      }))
+    );
+  }
+
+  @Post("/monitor/timeouts/scan")
+  triggerTimeoutScan(): TriggerTimeoutScanResponse {
+    return { generated: this.commandsService.triggerTimeoutScan(new Date()) };
+  }
+
+  @Post("/nodes/:nodeId/commands/:commandId/understanding")
+  submitUnderstandingReceipt(
+    @Param("nodeId") nodeId: string,
+    @Param("commandId") commandId: string,
+    @Body() body: SubmitUnderstandingReceiptRequest,
+    @Headers("x-node-id") requesterNodeId?: string
+  ): SubmitUnderstandingReceiptResponse {
+    this.ensureNodeAccess(nodeId, requesterNodeId);
+    const status = body?.understandingStatus;
+    if (status !== "UNDERSTOOD" && status !== "NEED_CLARIFICATION") {
+      throw new BadRequestException({
+        message: "Validation failed",
+        errors: { understandingStatus: "understandingStatus is required" }
+      });
+    }
+
+    const command = this.commandsService.submitUnderstandingReceipt({
+      nodeId,
+      commandId,
+      understandingStatus: status,
+      question: body.question?.trim() || undefined
+    });
+    if (!command) {
+      throw new NotFoundException({
+        message: "Node command not found",
+        nodeId,
+        commandId
+      });
+    }
+
+    return { command };
+  }
+
+  @Post("/nodes/:nodeId/commands/:commandId/execution-feedback")
+  submitExecutionFeedback(
+    @Param("nodeId") nodeId: string,
+    @Param("commandId") commandId: string,
+    @Body() body: SubmitExecutionFeedbackRequest,
+    @Headers("x-node-id") requesterNodeId?: string
+  ): SubmitExecutionFeedbackResponse {
+    this.ensureNodeAccess(nodeId, requesterNodeId);
+    const status = body?.executionStatus;
+    if (status !== "COMPLETED" && status !== "NOT_COMPLETED" && status !== "EXCEPTION") {
+      throw new BadRequestException({
+        message: "Validation failed",
+        errors: { executionStatus: "executionStatus is required" }
+      });
+    }
+
+    const command = this.commandsService.submitExecutionFeedback({
+      nodeId,
+      commandId,
+      executionStatus: status,
+      exceptionNote: body.exceptionNote?.trim() || undefined
+    });
+    if (!command) {
+      throw new NotFoundException({
+        message: "Node command not found",
+        nodeId,
+        commandId
+      });
+    }
+
+    return { command };
+  }
+
+  @Post("/nodes/:nodeId/commands/:commandId/feedback-aggregation")
+  submitFeedbackAggregation(
+    @Param("nodeId") nodeId: string,
+    @Param("commandId") commandId: string,
+    @Headers("x-node-id") requesterNodeId?: string
+  ): SubmitFeedbackAggregationResponse {
+    this.ensureNodeAccess(nodeId, requesterNodeId);
+    const summary = this.commandsService.aggregateDownstreamFeedback({
+      fromNodeId: nodeId,
+      commandId
+    });
+    return { summary };
+  }
+
+  @Post("/nodes/:nodeId/commands/:commandId/propagate")
+  propagateCommand(
+    @Param("nodeId") nodeId: string,
+    @Param("commandId") commandId: string,
+    @Body() body: PropagateCommandRequest,
+    @Headers("x-node-id") requesterNodeId?: string
+  ): PropagateCommandResponse {
+    this.ensureNodeAccess(nodeId, requesterNodeId);
+    if (!Array.isArray(body?.targetNodeIds) || body.targetNodeIds.length === 0) {
+      throw new BadRequestException({
+        message: "Validation failed",
+        errors: { targetNodeIds: "targetNodeIds must contain at least one node" }
+      });
+    }
+
+    const fromNodeCommand = this.commandsService.getNodeCommand(nodeId, commandId);
+    if (!fromNodeCommand) {
+      throw new NotFoundException({
+        message: "Node command not found",
+        nodeId,
+        commandId
+      });
+    }
+    if (fromNodeCommand.nodeStatus !== "UNDERSTOOD") {
+      throw new BadRequestException({
+        message: "Validation failed",
+        errors: { commandId: "command must be UNDERSTOOD before propagation" }
+      });
+    }
+
+    const targetNodeIds = Array.from(new Set(body.targetNodeIds.map((item) => item.trim())));
+    return this.commandsService.propagateCommand({
+      fromNodeId: nodeId,
+      commandId,
+      targetNodeIds
+    });
   }
 
   @Post("drafts/:draftId/issue")
@@ -62,5 +409,102 @@ export class CommandsController {
       idempotencyKey: idempotencyKey?.trim() || undefined
     });
     return { command };
+  }
+
+  @Post(":commandId/root-node")
+  bindRootNode(
+    @Param("commandId") commandId: string,
+    @Body() body: BindRootNodeRequest
+  ): BindRootNodeResponse {
+    const rootNodeId = body?.rootNodeId?.trim();
+    if (!rootNodeId) {
+      throw new BadRequestException({
+        message: "Validation failed",
+        errors: { rootNodeId: "rootNodeId is required" }
+      });
+    }
+
+    const command = this.commandsService.findCommand(commandId);
+    if (!command) {
+      throw new NotFoundException({
+        message: "Command not found",
+        commandId
+      });
+    }
+
+    const node = this.commandsService.findRootNode(rootNodeId);
+    if (!node) {
+      throw new BadRequestException({
+        message: "Validation failed",
+        errors: { rootNodeId: "root node does not exist" }
+      });
+    }
+    if (!node.available) {
+      throw new BadRequestException({
+        message: "Validation failed",
+        errors: { rootNodeId: "selected root node is unavailable" }
+      });
+    }
+
+    return this.commandsService.bindRootNode({
+      commandId,
+      rootNodeId
+    });
+  }
+
+  @Post(":commandId/evaluate-closure")
+  evaluateClosure(@Param("commandId") commandId: string): EvaluateClosureResponse {
+    const command = this.commandsService.findCommand(commandId);
+    if (!command) {
+      throw new NotFoundException({
+        message: "Command not found",
+        commandId
+      });
+    }
+    return this.commandsService.evaluateClosure(commandId);
+  }
+
+  @Post(":commandId/next-round")
+  createNextRound(
+    @Param("commandId") commandId: string,
+    @Body() body: CreateNextRoundCommandRequest
+  ): CreateNextRoundCommandResponse {
+    const result = this.commandsService.createNextRoundCommand({
+      previousCommandId: commandId,
+      request: body
+    });
+    if (!result) {
+      throw new NotFoundException({
+        message: "Command not found",
+        commandId
+      });
+    }
+    return result;
+  }
+
+  private ensureNodeAccess(nodeId: string, requesterNodeId?: string): void {
+    const nodeExists = this.commandsService.isKnownNode(nodeId);
+    if (!nodeExists) {
+      throw new ForbiddenException({
+        message: "Forbidden node access",
+        nodeId
+      });
+    }
+    if (!requesterNodeId || requesterNodeId !== nodeId) {
+      throw new ForbiddenException({
+        message: "Forbidden node access",
+        nodeId
+      });
+    }
+  }
+
+  private ensureOperatorRole(role: string | undefined, allowed: string[]): void {
+    const normalized = role?.trim().toUpperCase();
+    if (!normalized || !allowed.includes(normalized)) {
+      throw new ForbiddenException({
+        message: "Forbidden operator role",
+        requiredRoles: allowed
+      });
+    }
   }
 }

@@ -67,4 +67,10 @@ pnpm build
 pnpm lint
 pnpm test
 pnpm format
+pnpm verify:callback-signature /tmp/payload.json <signature-hex> <secret>
+pnpm e2e:external-integration
+pnpm regression:db-persistence
 ```
+
+Signature verification guide: `docs/external-callback-signature.md`
+Partner onboarding SOP: `docs/external-integration-sop.md`
