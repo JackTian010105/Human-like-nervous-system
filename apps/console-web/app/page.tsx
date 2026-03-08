@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   BindRootNodeResponse,
   CommandDraft,
@@ -83,6 +83,7 @@ export default function HomePage() {
     progress: { totalNodes: number; completedNodes: number };
   } | null>(null);
   const [focusedChainNodeId, setFocusedChainNodeId] = useState<string | null>(null);
+  const [focusedAnomalyIndex, setFocusedAnomalyIndex] = useState(0);
   const [realtimeConnected, setRealtimeConnected] = useState(false);
   const [realtimeEvents, setRealtimeEvents] = useState<
     { commandId: string; eventType: string; eventSequence: number; timestamp: string }[]
@@ -519,6 +520,10 @@ export default function HomePage() {
     const merged = Array.from(new Set([...preferred, ...existing]));
     return ["ALL", ...merged];
   }, [commands]);
+  const anomalyChainNodes = useMemo(
+    () => commandChainView?.nodes.filter((node) => node.nodeStatus === "ANOMALY_TIMEOUT") ?? [],
+    [commandChainView]
+  );
 
   const loadNodeCommands = async () => {
     setNodeWorkbenchError("");
@@ -751,7 +756,7 @@ export default function HomePage() {
     setTimeoutAlerts(payload.alerts);
   };
 
-  const loadExceptionDetail = async (commandId: string, nodeId: string) => {
+  const loadExceptionDetail = useCallback(async (commandId: string, nodeId: string) => {
     const response = await fetch(`${apiBase}/commands/alerts/timeouts/${commandId}/${nodeId}`);
     if (!response.ok) {
       return;
@@ -766,6 +771,42 @@ export default function HomePage() {
       };
     };
     setExceptionDetail(payload.detail);
+  }, [apiBase]);
+
+  const focusAnomalyByIndex = useCallback(
+    async (index: number, openDetail: boolean) => {
+      if (!selectedCommand || anomalyChainNodes.length === 0) {
+        return;
+      }
+      const normalizedIndex = (index + anomalyChainNodes.length) % anomalyChainNodes.length;
+      const target = anomalyChainNodes[normalizedIndex];
+      setFocusedAnomalyIndex(normalizedIndex);
+      setFocusedChainNodeId(target.nodeId);
+      if (openDetail) {
+        await loadExceptionDetail(selectedCommand.commandId, target.nodeId);
+      }
+    },
+    [anomalyChainNodes, loadExceptionDetail, selectedCommand]
+  );
+
+  const onChainKeyboardNavigate = async (event: KeyboardEvent<HTMLDivElement>) => {
+    if (anomalyChainNodes.length === 0) {
+      return;
+    }
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      await focusAnomalyByIndex(focusedAnomalyIndex + 1, false);
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      await focusAnomalyByIndex(focusedAnomalyIndex - 1, false);
+      return;
+    }
+    if (event.key === "Enter") {
+      event.preventDefault();
+      await focusAnomalyByIndex(focusedAnomalyIndex, true);
+    }
   };
 
   const queryTimeline = async (preset?: {
@@ -1449,25 +1490,29 @@ export default function HomePage() {
               </div>
             ) : null}
             {commandChainView ? (
-              <div style={{ marginTop: 8 }}>
+              <div style={{ marginTop: 8 }} tabIndex={0} onKeyDown={onChainKeyboardNavigate}>
                 <p>
                   progress: {commandChainView.progress.completedNodes}/
                   {commandChainView.progress.totalNodes}
                 </p>
+                <p>键盘导航: ↑/↓ 切换异常节点，Enter 打开异常详情。</p>
                 <h5>异常链路段快速定位</h5>
-                {commandChainView.nodes.filter((node) => node.nodeStatus === "ANOMALY_TIMEOUT").length >
-                0 ? (
+                {anomalyChainNodes.length > 0 ? (
                   <ul>
-                    {commandChainView.nodes
-                      .filter((node) => node.nodeStatus === "ANOMALY_TIMEOUT")
-                      .map((node) => (
+                    {anomalyChainNodes.map((node, index) => (
                         <li key={`alert-${node.nodeId}-${node.arrivedAt}`}>
                           <button
                             type="button"
-                            onClick={() => setFocusedChainNodeId(node.nodeId)}
+                            onClick={async () => {
+                              setFocusedAnomalyIndex(index);
+                              setFocusedChainNodeId(node.nodeId);
+                              if (selectedCommand) {
+                                await loadExceptionDetail(selectedCommand.commandId, node.nodeId);
+                              }
+                            }}
                             aria-label={`定位异常节点 ${node.nodeId}`}
                           >
-                            定位 {node.sourceNodeId} -&gt; {node.nodeId}
+                            ⚠ 定位并查看 {node.sourceNodeId} -&gt; {node.nodeId}
                           </button>
                         </li>
                       ))}
@@ -1492,7 +1537,9 @@ export default function HomePage() {
                       <span
                         style={focusedChainNodeId === node.nodeId ? { outline: "2px solid #1d4ed8" } : undefined}
                       >
-                        {node.sourceNodeId} -&gt; {node.nodeId} | {node.nodeStatus} | {node.arrivedAt}
+                        {node.sourceNodeId} -&gt; {node.nodeId} |{" "}
+                        {node.nodeStatus === "ANOMALY_TIMEOUT" ? "⚠ 异常超时" : node.nodeStatus} |{" "}
+                        {node.arrivedAt}
                       </span>
                     </li>
                   ))}
