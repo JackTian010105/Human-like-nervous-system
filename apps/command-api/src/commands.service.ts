@@ -761,6 +761,22 @@ export class CommandsService implements OnModuleInit {
         invalidTargets.push(targetNodeId);
         return;
       }
+      const existing = this.nodeDeliveries.find(
+        (item) =>
+          item.commandId === params.commandId &&
+          item.nodeId === targetNodeId &&
+          item.sourceNodeId === params.fromNodeId
+      );
+      if (existing) {
+        propagated.push({
+          commandId: params.commandId,
+          fromNodeId: params.fromNodeId,
+          toNodeId: targetNodeId,
+          propagatedAt: existing.arrivedAt
+        });
+        return;
+      }
+
       const now = new Date().toISOString();
       this.upsertNodeDelivery({
         commandId: params.commandId,

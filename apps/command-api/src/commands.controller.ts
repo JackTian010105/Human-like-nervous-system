@@ -373,7 +373,15 @@ export class CommandsController {
       });
     }
 
-    const targetNodeIds = Array.from(new Set(body.targetNodeIds.map((item) => item.trim())));
+    const targetNodeIds = Array.from(
+      new Set(body.targetNodeIds.map((item) => item.trim()).filter((item) => item.length > 0))
+    );
+    if (targetNodeIds.length === 0) {
+      throw new BadRequestException({
+        message: "Validation failed",
+        errors: { targetNodeIds: "targetNodeIds must contain at least one valid node" }
+      });
+    }
     return this.commandsService.propagateCommand({
       fromNodeId: nodeId,
       commandId,
