@@ -26,11 +26,25 @@ for test_cmd in "${TESTS[@]}"; do
 done
 
 if [[ -n "${DATABASE_URL:-}" && -n "${PSQL_BIN:-}" ]]; then
+  :
+else
+  if [[ -z "${PSQL_BIN:-}" ]]; then
+    if [[ -x "/opt/homebrew/opt/postgresql@16/bin/psql" ]]; then
+      export PSQL_BIN="/opt/homebrew/opt/postgresql@16/bin/psql"
+    elif command -v psql >/dev/null 2>&1; then
+      export PSQL_BIN="$(command -v psql)"
+    fi
+  fi
+  if [[ -z "${DATABASE_URL:-}" ]]; then
+    export DATABASE_URL="postgresql://${USER}@localhost:5432/command_neural"
+  fi
+fi
+
+if [[ -n "${DATABASE_URL:-}" && -n "${PSQL_BIN:-}" ]] && "$PSQL_BIN" "$DATABASE_URL" -c 'select 1' >/dev/null 2>&1; then
   echo "[run] pnpm regression:db-persistence"
   pnpm regression:db-persistence
 else
-  echo "[skip] regression:db-persistence (set DATABASE_URL and PSQL_BIN to enable)"
+  echo "[skip] regression:db-persistence (unable to detect/connect postgres)"
 fi
 
 echo "FULL REGRESSION DRILL PASS"
-
