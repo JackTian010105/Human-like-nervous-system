@@ -180,16 +180,22 @@ export class CommandsController {
     @Query("nodeId") nodeId?: string,
     @Query("eventType") eventType?: string,
     @Query("from") from?: string,
-    @Query("to") to?: string
+    @Query("to") to?: string,
+    @Query("page") page?: string,
+    @Query("pageSize") pageSize?: string
   ): EventTimelineResponse {
+    const parsedPage = page ? Number.parseInt(page, 10) : undefined;
+    const parsedPageSize = pageSize ? Number.parseInt(pageSize, 10) : undefined;
     const query: AuditQuery = {
       commandId: commandId?.trim() || undefined,
       nodeId: nodeId?.trim() || undefined,
       eventType: eventType?.trim() || undefined,
       from: from?.trim() || undefined,
-      to: to?.trim() || undefined
+      to: to?.trim() || undefined,
+      page: Number.isFinite(parsedPage) ? parsedPage : undefined,
+      pageSize: Number.isFinite(parsedPageSize) ? parsedPageSize : undefined
     };
-    return { events: this.commandsService.queryAuditEvents(query) };
+    return this.commandsService.queryAuditEvents(query);
   }
 
   @Get("/operations/health")

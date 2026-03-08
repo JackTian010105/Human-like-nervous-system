@@ -5,6 +5,7 @@ import type {
   AlertSeverity,
   AuditQuery,
   AuditEvent,
+  EventTimelineResponse,
   BindRootNodeResponse,
   CommandDraft,
   CommandChainNodeView,
@@ -1035,8 +1036,15 @@ export class CommandsService implements OnModuleInit {
     return this.auditEvents.filter((event) => event.commandId === commandId);
   }
 
-  queryAuditEvents(query: AuditQuery): AuditEvent[] {
-    return this.auditEvents
+  queryAuditEvents(query: AuditQuery): EventTimelineResponse {
+    const page = Number.isFinite(query.page) && (query.page as number) > 0 ? (query.page as number) : 1;
+    const pageSizeRaw =
+      Number.isFinite(query.pageSize) && (query.pageSize as number) > 0
+        ? (query.pageSize as number)
+        : 100;
+    const pageSize = Math.min(pageSizeRaw, 500);
+
+    const filtered = this.auditEvents
       .filter((event) => {
         if (query.commandId && event.commandId !== query.commandId) {
           return false;
@@ -1061,6 +1069,20 @@ export class CommandsService implements OnModuleInit {
         }
         return a.timestamp.localeCompare(b.timestamp);
       });
+    const total = filtered.length;
+    const totalPages = total === 0 ? 1 : Math.ceil(total / pageSize);
+    const safePage = Math.min(page, totalPages);
+    const start = (safePage - 1) * pageSize;
+    const events = filtered.slice(start, start + pageSize);
+    return {
+      events,
+      pagination: {
+        page: safePage,
+        pageSize,
+        total,
+        totalPages
+      }
+    };
   }
 
   getOperationsHealthPanel(severity?: AlertSeverity): GetOperationsHealthResponse {

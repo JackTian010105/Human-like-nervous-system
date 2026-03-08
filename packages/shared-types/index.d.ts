@@ -258,10 +258,18 @@ export interface AuditQuery {
   eventType?: string;
   from?: string;
   to?: string;
+  page?: number;
+  pageSize?: number;
 }
 
 export interface EventTimelineResponse {
   events: AuditEvent[];
+  pagination?: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
 }
 export type NodeRoleType = "CAPTAIN" | "MEMBER" | "EXTERNAL";
 export type NodeConnectionStatus = "ONLINE" | "OFFLINE" | "DEGRADED" | "RECOVERING";
