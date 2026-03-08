@@ -477,14 +477,27 @@ export class CommandsController {
     @Param("commandId") commandId: string,
     @Body() body: CreateNextRoundCommandRequest
   ): CreateNextRoundCommandResponse {
+    const previous = this.commandsService.findCommand(commandId);
+    if (!previous) {
+      throw new NotFoundException({
+        message: "Command not found",
+        commandId
+      });
+    }
+    if (previous.status !== "FEEDBACK_RETURNING" && previous.status !== "CLOSED") {
+      throw new BadRequestException({
+        message: "Validation failed",
+        errors: { commandId: "next-round can only be created from FEEDBACK_RETURNING or CLOSED" }
+      });
+    }
     const result = this.commandsService.createNextRoundCommand({
       previousCommandId: commandId,
       request: body
     });
     if (!result) {
-      throw new NotFoundException({
-        message: "Command not found",
-        commandId
+      throw new BadRequestException({
+        message: "Validation failed",
+        errors: { commandId: "previous command context is incomplete" }
       });
     }
     return result;

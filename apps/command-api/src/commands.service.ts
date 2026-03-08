@@ -637,15 +637,34 @@ export class CommandsService implements OnModuleInit {
       return undefined;
     }
 
+    const inheritedFields: Array<
+      "content" | "targetNode" | "executionRequirement" | "feedbackRequirement"
+    > = [];
+    const nextContent = params.request.content?.trim();
+    const nextTargetNode = params.request.targetNode?.trim();
+    const nextExecutionRequirement = params.request.executionRequirement?.trim();
+    const nextFeedbackRequirement = params.request.feedbackRequirement?.trim();
+
+    if (!nextContent) {
+      inheritedFields.push("content");
+    }
+    if (!nextTargetNode) {
+      inheritedFields.push("targetNode");
+    }
+    if (!nextExecutionRequirement) {
+      inheritedFields.push("executionRequirement");
+    }
+    if (!nextFeedbackRequirement) {
+      inheritedFields.push("feedbackRequirement");
+    }
+
     const nextDraft: CommandDraft = {
       draftId: randomUUID(),
       status: "DRAFT",
-      content: params.request.content?.trim() || previousDraft.content,
-      targetNode: params.request.targetNode?.trim() || previousDraft.targetNode,
-      executionRequirement:
-        params.request.executionRequirement?.trim() || previousDraft.executionRequirement,
-      feedbackRequirement:
-        params.request.feedbackRequirement?.trim() || previousDraft.feedbackRequirement,
+      content: nextContent || previousDraft.content,
+      targetNode: nextTargetNode || previousDraft.targetNode,
+      executionRequirement: nextExecutionRequirement || previousDraft.executionRequirement,
+      feedbackRequirement: nextFeedbackRequirement || previousDraft.feedbackRequirement,
       createdAt: new Date().toISOString()
     };
     this.drafts.push(nextDraft);
@@ -668,7 +687,7 @@ export class CommandsService implements OnModuleInit {
 
     return {
       command: nextCommand,
-      inheritedFields: ["content", "targetNode", "executionRequirement", "feedbackRequirement"],
+      inheritedFields,
       overridableFields: ["content", "targetNode", "executionRequirement", "feedbackRequirement"]
     };
   }
