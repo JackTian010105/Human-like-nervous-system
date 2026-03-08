@@ -74,3 +74,8 @@ pnpm regression:db-persistence
 
 Signature verification guide: `docs/external-callback-signature.md`
 Partner onboarding SOP: `docs/external-integration-sop.md`
+Staging checklist: `docs/staging-go-live-checklist.md`
+Staging execution template: `docs/staging-go-live-execution-template.md`
+Staging rollback runbook: `docs/staging-rollback-runbook.md`
+Staging rollback evidence (sample): `docs/staging-rollback-evidence-2026-03-08.md`
+PostgreSQL least-privilege SQL: `infrastructure/scripts/postgres-least-privilege.sql`
