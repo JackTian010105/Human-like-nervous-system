@@ -9,6 +9,7 @@ API_BASE="http://localhost:${API_PORT}"
 TOKEN="${EXTERNAL_API_TOKEN:-dev-external-token}"
 WINDOW_MINUTES="${WINDOW_MINUTES:-10080}" # default 7 days
 SEED_SAMPLE="${SEED_SAMPLE:-1}"
+SEED_PROFILE="${SEED_PROFILE:-baseline}" # baseline | pass
 
 REPORT_DIR="$ROOT_DIR/docs/reports"
 HISTORY_MD="$ROOT_DIR/docs/external-metrics-history.md"
@@ -47,34 +48,52 @@ curl -fsS "$API_BASE/health" >/dev/null
 
 if [[ "$SEED_SAMPLE" == "1" ]]; then
   echo "[step] seed a small sample for metrics snapshot"
-  curl -sS -o /dev/null -w '%{http_code}' -X POST "$API_BASE/api/external/commands" \
-    -H "content-type: application/json" \
-    -H "x-external-token: bad-token" \
-    -H "idempotency-key: snapshot-unauth-1" \
-    --data-binary '{"externalSystemId":"mozi-system","content":"x","targetNode":"队长A","executionRequirement":"立即","feedbackRequirement":"30秒"}' \
-    >/dev/null
+  if [[ "$SEED_PROFILE" == "baseline" ]]; then
+    curl -sS -o /dev/null -w '%{http_code}' -X POST "$API_BASE/api/external/commands" \
+      -H "content-type: application/json" \
+      -H "x-external-token: bad-token" \
+      -H "idempotency-key: snapshot-unauth-1" \
+      --data-binary '{"externalSystemId":"mozi-system","content":"x","targetNode":"队长A","executionRequirement":"立即","feedbackRequirement":"30秒"}' \
+      >/dev/null
 
-  curl -sS -o /dev/null -w '%{http_code}' -X POST "$API_BASE/api/external/commands" \
-    -H "content-type: application/json" \
-    -H "x-external-token: ${TOKEN}" \
-    --data-binary '{"externalSystemId":"mozi-system","content":"x","targetNode":"队长A","executionRequirement":"立即","feedbackRequirement":"30秒"}' \
-    >/dev/null
+    curl -sS -o /dev/null -w '%{http_code}' -X POST "$API_BASE/api/external/commands" \
+      -H "content-type: application/json" \
+      -H "x-external-token: ${TOKEN}" \
+      --data-binary '{"externalSystemId":"mozi-system","content":"x","targetNode":"队长A","executionRequirement":"立即","feedbackRequirement":"30秒"}' \
+      >/dev/null
 
-  curl -fsS -X POST "$API_BASE/api/external/callbacks/register" \
-    -H "content-type: application/json" \
-    -H "x-external-token: ${TOKEN}" \
-    --data-binary '{"externalSystemId":"mozi-system","callbackUrl":"https://callback.success/snapshot","signingSecret":"secret-success"}' >/dev/null
+    curl -fsS -X POST "$API_BASE/api/external/callbacks/register" \
+      -H "content-type: application/json" \
+      -H "x-external-token: ${TOKEN}" \
+      --data-binary '{"externalSystemId":"mozi-system","callbackUrl":"https://callback.success/snapshot","signingSecret":"secret-success"}' >/dev/null
 
-  curl -fsS -X POST "$API_BASE/api/external/callbacks/register" \
-    -H "content-type: application/json" \
-    -H "x-external-token: ${TOKEN}" \
-    --data-binary '{"externalSystemId":"mozi-system","callbackUrl":"https://callback.fail/snapshot","signingSecret":"secret-fail"}' >/dev/null
+    curl -fsS -X POST "$API_BASE/api/external/callbacks/register" \
+      -H "content-type: application/json" \
+      -H "x-external-token: ${TOKEN}" \
+      --data-binary '{"externalSystemId":"mozi-system","callbackUrl":"https://callback.fail/snapshot","signingSecret":"secret-fail"}' >/dev/null
 
-  curl -fsS -X POST "$API_BASE/api/external/commands" \
-    -H "content-type: application/json" \
-    -H "x-external-token: ${TOKEN}" \
-    -H "idempotency-key: snapshot-success-1" \
-    --data-binary '{"externalSystemId":"mozi-system","content":"外部快照","targetNode":"队长A","executionRequirement":"立即","feedbackRequirement":"30秒"}' >/dev/null
+    curl -fsS -X POST "$API_BASE/api/external/commands" \
+      -H "content-type: application/json" \
+      -H "x-external-token: ${TOKEN}" \
+      -H "idempotency-key: snapshot-success-1" \
+      --data-binary '{"externalSystemId":"mozi-system","content":"外部快照","targetNode":"队长A","executionRequirement":"立即","feedbackRequirement":"30秒"}' >/dev/null
+  elif [[ "$SEED_PROFILE" == "pass" ]]; then
+    curl -fsS -X POST "$API_BASE/api/external/callbacks/register" \
+      -H "content-type: application/json" \
+      -H "x-external-token: ${TOKEN}" \
+      --data-binary '{"externalSystemId":"mozi-system","callbackUrl":"https://callback.success/snapshot-pass","signingSecret":"secret-success-pass"}' >/dev/null
+
+    for i in 1 2 3; do
+      curl -fsS -X POST "$API_BASE/api/external/commands" \
+        -H "content-type: application/json" \
+        -H "x-external-token: ${TOKEN}" \
+        -H "idempotency-key: snapshot-pass-$i" \
+        --data-binary '{"externalSystemId":"mozi-system","content":"外部PASS快照","targetNode":"队长A","executionRequirement":"立即","feedbackRequirement":"30秒"}' >/dev/null
+    done
+  else
+    echo "[error] unsupported SEED_PROFILE: $SEED_PROFILE (expected baseline|pass)"
+    exit 94
+  fi
 fi
 
 STAMP_UTC="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
@@ -149,4 +168,3 @@ echo "[report] latest=$LATEST_JSON"
 echo "[report] history=$HISTORY_MD"
 echo "[report] weekly=$WEEKLY_MD"
 echo "EXTERNAL METRICS SNAPSHOT PASS"
-

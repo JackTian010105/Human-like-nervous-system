@@ -31,6 +31,7 @@
     "gate:release:strict": "bash infrastructure/scripts/gate-release.sh strict",
     "gate:release:strict:1000": "RUN_NODE_SCALE_1000=1 bash infrastructure/scripts/gate-release.sh strict",
     "gate:release:precheck": "bash infrastructure/scripts/gate-release-pass-precheck.sh",
+    "gate:release:auto-remediate": "bash infrastructure/scripts/gate-release-auto-remediation-drill.sh",
     "e2e:external-integration": "bash infrastructure/scripts/external-integration-e2e.sh",
     "regression:db-persistence": "bash infrastructure/scripts/db-persistence-regression.sh"
   },
