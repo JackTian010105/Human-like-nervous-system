@@ -138,6 +138,11 @@ jobs:
       - name: Create issue on gate failure
         if: always() && steps.gate_parse.outputs.blocked == 'true'
         uses: actions/github-script@v7
+        env:
+          GATE_OVERALL: ${{ steps.gate_parse.outputs.overall }}
+          GATE_FULL: ${{ steps.gate_parse.outputs.full }}
+          GATE_SCALE: ${{ steps.gate_parse.outputs.scale }}
+          GATE_EXTERNAL: ${{ steps.gate_parse.outputs.external }}
         with:
           script: |
             const gateLabel = 'nightly-gate';
@@ -217,11 +222,6 @@ jobs:
                 labels: [gateLabel]
               });
             }
-          env:
-            GATE_OVERALL: ${{ steps.gate_parse.outputs.overall }}
-            GATE_FULL: ${{ steps.gate_parse.outputs.full }}
-            GATE_SCALE: ${{ steps.gate_parse.outputs.scale }}
-            GATE_EXTERNAL: ${{ steps.gate_parse.outputs.external }}
 
       - name: Auto-close issue on gate recovery
         if: always() && steps.gate_parse.outputs.blocked == 'false'
