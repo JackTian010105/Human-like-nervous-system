@@ -52,6 +52,34 @@ console.log(`successRate=${j.successRate}, p95LatencyMs=${j.p95LatencyMs}, comma
 ' "$SCALE_JSON_PATH")"
 fi
 
+EXTERNAL_JSON_PATH="$ROOT_DIR/docs/external-metrics-latest.json"
+EXTERNAL_WEEKLY_PATH="$ROOT_DIR/docs/external-metrics-weekly-trend.md"
+EXTERNAL_SUMMARY="not available"
+EXTERNAL_WEEKLY_AVG="not available"
+if [[ -f "$EXTERNAL_JSON_PATH" ]]; then
+  EXTERNAL_SUMMARY="$(node -e '
+const fs=require("fs");
+const j=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
+const api=(j.apiRequests.availabilityRate*100).toFixed(2);
+const del=(j.callbackDeliveries.eventDeliverySuccessRate*100).toFixed(2);
+const retry=(j.callbackDeliveries.retrySuccessRate*100).toFixed(2);
+console.log(`window=${j.windowMinutes}min, apiAvailability=${api}%, deliverySuccess=${del}%, retrySuccess=${retry}%`);
+' "$EXTERNAL_JSON_PATH")"
+fi
+
+if [[ -f "$EXTERNAL_WEEKLY_PATH" ]]; then
+  EXTERNAL_WEEKLY_AVG="$(node -e '
+const fs=require("fs");
+const txt=fs.readFileSync(process.argv[1],"utf8");
+const find=(re)=> (txt.match(re)?.[1] ?? "N/A");
+const api=find(/API Availability Avg:\s*([0-9.]+%)/);
+const del=find(/Delivery Success Avg:\s*([0-9.]+%)/);
+const retry=find(/Retry Success Avg:\s*([0-9.]+%)/);
+const count=find(/Snapshot count:\s*([0-9]+)/);
+console.log(`snapshotCount=${count}, apiAvailabilityAvg=${api}, deliverySuccessAvg=${del}, retrySuccessAvg=${retry}`);
+' "$EXTERNAL_WEEKLY_PATH")"
+fi
+
 {
   echo "# Release Acceptance Report"
   echo ""
@@ -65,6 +93,8 @@ fi
   echo "## KPI Snapshot"
   echo ""
   echo "- ScalabilityBaseline: $SCALE_SUMMARY"
+  echo "- ExternalMetricsLatest: $EXTERNAL_SUMMARY"
+  echo "- ExternalMetricsWeekly: $EXTERNAL_WEEKLY_AVG"
   echo ""
   echo "## Validation Evidence"
   echo ""
@@ -78,6 +108,8 @@ fi
   echo ""
   echo "- [scalability-baseline-latest.json](../scalability-baseline-latest.json)"
   echo "- [scalability-baseline-history.md](../scalability-baseline-history.md)"
+  echo "- [external-metrics-latest.json](../external-metrics-latest.json)"
+  echo "- [external-metrics-weekly-trend.md](../external-metrics-weekly-trend.md)"
 } >"$REPORT_FILE"
 
 cp "$REPORT_FILE" "$LATEST_REPORT"
