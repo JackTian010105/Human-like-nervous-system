@@ -109,6 +109,7 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
+            const gateLabel = 'nightly-gate';
             const fs = require('fs');
             const reportPath = 'docs/release-acceptance-latest.md';
             let overall = 'UNKNOWN';
@@ -140,6 +141,26 @@ jobs:
               'Please review artifacts: `nightly-release-gate-artifacts` and run remediation checklist if needed.'
             ].join('\n');
 
+            try {
+              await github.rest.issues.getLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: gateLabel
+              });
+            } catch (err) {
+              if (err.status === 404) {
+                await github.rest.issues.createLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name: gateLabel,
+                  color: 'b60205',
+                  description: 'Nightly release gate tracking'
+                });
+              } else {
+                throw err;
+              }
+            }
+
             const existing = await github.paginate(github.rest.issues.listForRepo, {
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -148,6 +169,12 @@ jobs:
             });
             const matched = existing.find((issue) => issue.title === title);
             if (matched) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: matched.number,
+                labels: [gateLabel]
+              });
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -163,7 +190,8 @@ jobs:
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 title,
-                body
+                body,
+                labels: [gateLabel]
               });
             }
 
