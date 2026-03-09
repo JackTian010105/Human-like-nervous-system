@@ -29,6 +29,7 @@
     "gate:release": "bash infrastructure/scripts/gate-release.sh",
     "gate:release:fast": "bash infrastructure/scripts/gate-release.sh fast",
     "gate:release:strict": "bash infrastructure/scripts/gate-release.sh strict",
+    "gate:release:strict:1000": "RUN_NODE_SCALE_1000=1 bash infrastructure/scripts/gate-release.sh strict",
     "e2e:external-integration": "bash infrastructure/scripts/external-integration-e2e.sh",
     "regression:db-persistence": "bash infrastructure/scripts/db-persistence-regression.sh"
   },

@@ -77,6 +77,7 @@ pnpm report:external-metrics-snapshot
 pnpm gate:release
 pnpm gate:release:fast
 pnpm gate:release:strict
+pnpm gate:release:strict:1000
 pnpm e2e:external-integration
 pnpm regression:db-persistence
 ```
@@ -92,6 +93,7 @@ Optional full-drill flags:
 - `pnpm gate:release` (CI-oriented command, always enforces gate)
 - `pnpm gate:release:fast` (skip full-drill, evaluate using current artifacts)
 - `pnpm gate:release:strict` (run full-drill first, then enforce gate)
+- `pnpm gate:release:strict:1000` (strict + include 1000-node scale check)
 
 Signature verification guide: `docs/external-callback-signature.md`
 Partner onboarding SOP: `docs/external-integration-sop.md`
