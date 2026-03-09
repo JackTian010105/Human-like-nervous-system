@@ -1,12 +1,12 @@
 # Release Acceptance Report
 
-- GeneratedAt(UTC): 2026-03-09T01:49:13Z
+- GeneratedAt(UTC): 2026-03-09T01:48:59Z
 - Branch: main
 - Commit: e78c79b
 - FullDrill: SKIPPED
 - RunScalabilityBaseline: 1
 - RunNodeScale1000: 0
-- ReleaseGateEnforce: 0
+- ReleaseGateEnforce: 1
 - OverallDecision: WARN
 
 ## KPI Snapshot

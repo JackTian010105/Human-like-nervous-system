@@ -84,6 +84,8 @@ Optional full-drill flags:
 - `RUN_NODE_SCALE_1000=1 pnpm test:full-drill`
 - `RUN_FULL_DRILL=0 pnpm report:release-acceptance` (only generate report from existing artifacts)
 - `WINDOW_MINUTES=10080 SEED_SAMPLE=1 pnpm report:external-metrics-snapshot`
+- `RELEASE_GATE_ENFORCE=1 pnpm report:release-acceptance` (default, WARN blocks with exit code 92)
+- `RELEASE_GATE_ENFORCE=0 pnpm report:release-acceptance` (generate report only, no block)
 
 Signature verification guide: `docs/external-callback-signature.md`
 Partner onboarding SOP: `docs/external-integration-sop.md`
