@@ -75,6 +75,8 @@ pnpm test:full-drill
 pnpm report:release-acceptance
 pnpm report:external-metrics-snapshot
 pnpm gate:release
+pnpm gate:release:fast
+pnpm gate:release:strict
 pnpm e2e:external-integration
 pnpm regression:db-persistence
 ```
@@ -88,6 +90,8 @@ Optional full-drill flags:
 - `RELEASE_GATE_ENFORCE=1 pnpm report:release-acceptance` (default, WARN blocks with exit code 92)
 - `RELEASE_GATE_ENFORCE=0 pnpm report:release-acceptance` (generate report only, no block)
 - `pnpm gate:release` (CI-oriented command, always enforces gate)
+- `pnpm gate:release:fast` (skip full-drill, evaluate using current artifacts)
+- `pnpm gate:release:strict` (run full-drill first, then enforce gate)
 
 Signature verification guide: `docs/external-callback-signature.md`
 Partner onboarding SOP: `docs/external-integration-sop.md`

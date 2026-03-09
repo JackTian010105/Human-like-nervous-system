@@ -27,6 +27,8 @@
     "report:release-acceptance": "bash infrastructure/scripts/release-acceptance-report.sh",
     "report:external-metrics-snapshot": "bash infrastructure/scripts/external-metrics-snapshot.sh",
     "gate:release": "bash infrastructure/scripts/gate-release.sh",
+    "gate:release:fast": "bash infrastructure/scripts/gate-release.sh fast",
+    "gate:release:strict": "bash infrastructure/scripts/gate-release.sh strict",
     "e2e:external-integration": "bash infrastructure/scripts/external-integration-e2e.sh",
     "regression:db-persistence": "bash infrastructure/scripts/db-persistence-regression.sh"
   },
