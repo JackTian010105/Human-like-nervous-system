@@ -73,6 +73,7 @@ pnpm test:scalability-baseline
 pnpm test:external-metrics-export
 pnpm test:full-drill
 pnpm report:release-acceptance
+pnpm report:external-metrics-snapshot
 pnpm e2e:external-integration
 pnpm regression:db-persistence
 ```
@@ -82,6 +83,7 @@ Optional full-drill flags:
 - `RUN_SCALABILITY_BASELINE=1 pnpm test:full-drill`
 - `RUN_NODE_SCALE_1000=1 pnpm test:full-drill`
 - `RUN_FULL_DRILL=0 pnpm report:release-acceptance` (only generate report from existing artifacts)
+- `WINDOW_MINUTES=10080 SEED_SAMPLE=1 pnpm report:external-metrics-snapshot`
 
 Signature verification guide: `docs/external-callback-signature.md`
 Partner onboarding SOP: `docs/external-integration-sop.md`

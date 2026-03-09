@@ -1,0 +1,1 @@
+{"generatedAt":"2026-03-09T01:22:23.707Z","windowMinutes":10080,"apiRequests":{"total":5,"success":3,"unauthorized":1,"badRequest":1,"serverError":0,"availabilityRate":0.75},"callbackDeliveries":{"total":5,"success":3,"failed":2,"eventDeliverySuccessRate":0.6,"retried":2,"retrySuccess":0,"retrySuccessRate":0}}
