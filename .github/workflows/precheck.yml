@@ -53,3 +53,62 @@ jobs:
 
       - name: DB Persistence Regression
         run: pnpm regression:db-persistence
+
+  release-gate:
+    needs: quality-and-regression
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: command_neural
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d command_neural"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/command_neural
+      PSQL_BIN: psql
+      EXTERNAL_API_TOKEN: dev-external-token
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.6.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Prepare external metrics snapshot for gate evaluation
+        run: WINDOW_MINUTES=30 SEED_SAMPLE=1 SEED_PROFILE=pass pnpm report:external-metrics-snapshot
+
+      - name: Enforce strict release gate
+        run: pnpm gate:release:strict
+
+      - name: Upload release gate artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: precheck-release-gate-artifacts
+          path: |
+            docs/reports/**
+            docs/release-acceptance-latest.md
+            docs/release-gate-remediation-latest.md
+            docs/external-metrics-latest.json
+            docs/external-metrics-weekly-trend.md
+            docs/scalability-baseline-latest.json
+          if-no-files-found: warn
