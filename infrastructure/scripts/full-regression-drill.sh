@@ -15,6 +15,7 @@ TESTS=(
   "test:next-round-creation"
   "test:audit-timeline-pagination"
   "test:node-ops-recovery"
+  "test:external-metrics-export"
   "e2e:external-integration"
 )
 

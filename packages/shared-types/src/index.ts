@@ -391,6 +391,28 @@ export interface ListCallbackDeliveriesResponse {
   deliveries: CallbackDeliveryRecord[];
 }
 
+export interface ExternalIntegrationMetricsResponse {
+  generatedAt: string;
+  windowMinutes: number;
+  apiRequests: {
+    total: number;
+    success: number;
+    unauthorized: number;
+    badRequest: number;
+    serverError: number;
+    availabilityRate: number;
+  };
+  callbackDeliveries: {
+    total: number;
+    success: number;
+    failed: number;
+    eventDeliverySuccessRate: number;
+    retried: number;
+    retrySuccess: number;
+    retrySuccessRate: number;
+  };
+}
+
 export type AlertSeverity = "CRITICAL" | "HIGH" | "MEDIUM";
 
 export interface OperationsAlertItem {

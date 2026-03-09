@@ -14,6 +14,7 @@ import type {
   CreateNextRoundCommandResponse,
   ExternalEventOrder,
   ExternalCreateCommandRequest,
+  ExternalIntegrationMetricsResponse,
   CreateCommandDraftRequest,
   EvaluateClosureResponse,
   ExceptionNodeDetail,
@@ -65,6 +66,12 @@ interface ExternalCallbackSubscription {
   registeredAt: string;
 }
 
+interface ExternalApiRequestMetric {
+  path: string;
+  status: "SUCCESS" | "UNAUTHORIZED" | "BAD_REQUEST" | "SERVER_ERROR";
+  timestampMs: number;
+}
+
 const UNDERSTANDING_TIMEOUT_SECONDS = 5;
 const PROPAGATION_TIMEOUT_SECONDS = 5;
 const EXTERNAL_IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
@@ -97,6 +104,7 @@ export class CommandsService implements OnModuleInit {
   >();
   private readonly callbackSubscriptions: ExternalCallbackSubscription[] = [];
   private readonly callbackDeliveries: CallbackDeliveryRecord[] = [];
+  private readonly externalApiRequests: ExternalApiRequestMetric[] = [];
   private readonly feedbackAggregationSnapshot = new Map<string, FeedbackAggregationSummary>();
   private readonly nodeProfiles = new Map<string, NodeProfile>();
 
@@ -1077,6 +1085,68 @@ export class CommandsService implements OnModuleInit {
       deliveries: [...deliveries]
         .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
         .slice(0, 200)
+    };
+  }
+
+  recordExternalApiRequest(params: {
+    path: string;
+    status: "SUCCESS" | "UNAUTHORIZED" | "BAD_REQUEST" | "SERVER_ERROR";
+  }): void {
+    this.externalApiRequests.push({
+      path: params.path,
+      status: params.status,
+      timestampMs: Date.now()
+    });
+    if (this.externalApiRequests.length > 20000) {
+      this.externalApiRequests.shift();
+    }
+  }
+
+  getExternalIntegrationMetrics(windowMinutes: number): ExternalIntegrationMetricsResponse {
+    const normalizedWindow = Number.isFinite(windowMinutes) && windowMinutes > 0 ? windowMinutes : 60;
+    const cutoffMs = Date.now() - normalizedWindow * 60 * 1000;
+    const apiSlice = this.externalApiRequests.filter((item) => item.timestampMs >= cutoffMs);
+    const callbackSlice = this.callbackDeliveries.filter(
+      (item) => new Date(item.timestamp).getTime() >= cutoffMs
+    );
+
+    const apiTotal = apiSlice.length;
+    const apiSuccess = apiSlice.filter((item) => item.status === "SUCCESS").length;
+    const apiUnauthorized = apiSlice.filter((item) => item.status === "UNAUTHORIZED").length;
+    const apiBadRequest = apiSlice.filter((item) => item.status === "BAD_REQUEST").length;
+    const apiServerError = apiSlice.filter((item) => item.status === "SERVER_ERROR").length;
+    const availabilityDenominator = apiSuccess + apiBadRequest + apiServerError;
+    const availabilityRate =
+      availabilityDenominator === 0 ? 1 : apiSuccess / availabilityDenominator;
+
+    const callbackTotal = callbackSlice.length;
+    const callbackSuccess = callbackSlice.filter((item) => item.status === "SUCCESS").length;
+    const callbackFailed = callbackSlice.filter((item) => item.status === "FAILED").length;
+    const eventDeliverySuccessRate = callbackTotal === 0 ? 1 : callbackSuccess / callbackTotal;
+    const retried = callbackSlice.filter((item) => item.attempts > 1);
+    const retrySuccess = retried.filter((item) => item.status === "SUCCESS").length;
+    const retrySuccessRate = retried.length === 0 ? 1 : retrySuccess / retried.length;
+
+    return {
+      generatedAt: new Date().toISOString(),
+      windowMinutes: normalizedWindow,
+      apiRequests: {
+        total: apiTotal,
+        success: apiSuccess,
+        unauthorized: apiUnauthorized,
+        badRequest: apiBadRequest,
+        serverError: apiServerError,
+        availabilityRate: Number(availabilityRate.toFixed(4))
+      },
+      callbackDeliveries: {
+        total: callbackTotal,
+        success: callbackSuccess,
+        failed: callbackFailed,
+        eventDeliverySuccessRate: Number(eventDeliverySuccessRate.toFixed(4)),
+        retried: retried.length,
+        retrySuccess,
+        retrySuccessRate: Number(retrySuccessRate.toFixed(4))
+      }
     };
   }
 

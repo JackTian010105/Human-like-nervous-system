@@ -15,6 +15,7 @@ import type {
   ExternalEventOrder,
   ExternalCreateCommandRequest,
   ExternalCreateCommandResponse,
+  ExternalIntegrationMetricsResponse,
   ListCallbackDeliveriesResponse,
   ListExternalEventsResponse,
   RegisterExternalCallbackRequest,
@@ -33,13 +34,15 @@ export class ExternalController {
     @Headers("x-external-token") externalToken?: string,
     @Headers("idempotency-key") idempotencyKey?: string
   ): ExternalCreateCommandResponse {
+    const path = "/api/external/commands";
     const expected = process.env.EXTERNAL_API_TOKEN ?? "dev-external-token";
     if (!externalToken || externalToken.trim() !== expected) {
       this.commandsService.recordExternalAuthRejected({
-        path: "/api/external/commands",
+        path,
         externalSystemId: body?.externalSystemId,
         reason: "invalid_credential"
       });
+      this.commandsService.recordExternalApiRequest({ path, status: "UNAUTHORIZED" });
       throw new UnauthorizedException({
         message: "Invalid external credential"
       });
@@ -47,6 +50,7 @@ export class ExternalController {
 
     const externalSystemId = body?.externalSystemId?.trim();
     if (!externalSystemId) {
+      this.commandsService.recordExternalApiRequest({ path, status: "BAD_REQUEST" });
       throw new BadRequestException({
         message: "Validation failed",
         errors: { externalSystemId: "externalSystemId is required" }
@@ -55,6 +59,7 @@ export class ExternalController {
 
     const normalizedIdempotencyKey = idempotencyKey?.trim();
     if (!normalizedIdempotencyKey) {
+      this.commandsService.recordExternalApiRequest({ path, status: "BAD_REQUEST" });
       throw new BadRequestException({
         message: "Validation failed",
         errors: { idempotencyKey: "Idempotency-Key header is required" }
@@ -68,6 +73,7 @@ export class ExternalController {
       feedbackRequirement: body.feedbackRequirement
     });
     if (!validation.ok) {
+      this.commandsService.recordExternalApiRequest({ path, status: "BAD_REQUEST" });
       throw new BadRequestException({
         message: "Validation failed",
         errors: validation.errors
@@ -82,6 +88,7 @@ export class ExternalController {
       },
       idempotencyKey: normalizedIdempotencyKey
     });
+    this.commandsService.recordExternalApiRequest({ path, status: "SUCCESS" });
     return {
       command: result.command,
       idempotencyKey: normalizedIdempotencyKey,
@@ -95,12 +102,15 @@ export class ExternalController {
     @Query("commandId") commandId?: string,
     @Query("order") order?: ExternalEventOrder
   ): ListExternalEventsResponse {
-    this.ensureExternalAuth(externalToken);
+    const path = "/api/external/events";
+    this.ensureExternalAuth(externalToken, path);
     const normalizedOrder: ExternalEventOrder =
       order === "asc" || order === "desc" ? order : "desc";
-    return {
+    const response = {
       events: this.commandsService.listExternalEvents(commandId?.trim() || undefined, normalizedOrder)
     };
+    this.commandsService.recordExternalApiRequest({ path, status: "SUCCESS" });
+    return response;
   }
 
   @Sse("events/stream")
@@ -108,8 +118,12 @@ export class ExternalController {
     @Query("token") token?: string,
     @Query("commandId") commandId?: string
   ): Observable<MessageEvent> {
-    this.ensureExternalAuth(token);
+    this.ensureExternalAuth(token, "/api/external/events/stream");
     const normalizedCommandId = commandId?.trim() || undefined;
+    this.commandsService.recordExternalApiRequest({
+      path: "/api/external/events/stream",
+      status: "SUCCESS"
+    });
     return this.commandsService.getRealtimeStream().pipe(
       filter((event) => (normalizedCommandId ? event.commandId === normalizedCommandId : true)),
       map((event) => ({ data: event }))
@@ -121,11 +135,13 @@ export class ExternalController {
     @Headers("x-external-token") externalToken?: string,
     @Body() body?: RegisterExternalCallbackRequest
   ): RegisterExternalCallbackResponse {
-    this.ensureExternalAuth(externalToken);
+    const path = "/api/external/callbacks/register";
+    this.ensureExternalAuth(externalToken, path);
     const externalSystemId = body?.externalSystemId?.trim();
     const callbackUrl = body?.callbackUrl?.trim();
     const signingSecret = body?.signingSecret?.trim();
     if (!externalSystemId || !callbackUrl || !signingSecret) {
+      this.commandsService.recordExternalApiRequest({ path, status: "BAD_REQUEST" });
       throw new BadRequestException({
         message: "Validation failed",
         errors: {
@@ -135,11 +151,13 @@ export class ExternalController {
         }
       });
     }
-    return this.commandsService.registerExternalCallback({
+    const response = this.commandsService.registerExternalCallback({
       externalSystemId,
       callbackUrl,
       signingSecret
     });
+    this.commandsService.recordExternalApiRequest({ path, status: "SUCCESS" });
+    return response;
   }
 
   @Get("callbacks/deliveries")
@@ -147,13 +165,32 @@ export class ExternalController {
     @Headers("x-external-token") externalToken?: string,
     @Query("commandId") commandId?: string
   ): ListCallbackDeliveriesResponse {
-    this.ensureExternalAuth(externalToken);
-    return this.commandsService.listCallbackDeliveries(commandId?.trim() || undefined);
+    const path = "/api/external/callbacks/deliveries";
+    this.ensureExternalAuth(externalToken, path);
+    const response = this.commandsService.listCallbackDeliveries(commandId?.trim() || undefined);
+    this.commandsService.recordExternalApiRequest({ path, status: "SUCCESS" });
+    return response;
   }
 
-  private ensureExternalAuth(token?: string): void {
+  @Get("metrics")
+  getExternalMetrics(
+    @Headers("x-external-token") externalToken?: string,
+    @Query("windowMinutes") windowMinutes?: string
+  ): ExternalIntegrationMetricsResponse {
+    const path = "/api/external/metrics";
+    this.ensureExternalAuth(externalToken, path);
+    const parsed = windowMinutes ? Number.parseInt(windowMinutes, 10) : 60;
+    const response = this.commandsService.getExternalIntegrationMetrics(
+      Number.isFinite(parsed) && parsed > 0 ? parsed : 60
+    );
+    this.commandsService.recordExternalApiRequest({ path, status: "SUCCESS" });
+    return response;
+  }
+
+  private ensureExternalAuth(token?: string, path = "/api/external"): void {
     const expected = process.env.EXTERNAL_API_TOKEN ?? "dev-external-token";
     if (!token || token.trim() !== expected) {
+      this.commandsService.recordExternalApiRequest({ path, status: "UNAUTHORIZED" });
       throw new UnauthorizedException({
         message: "Invalid external credential"
       });
