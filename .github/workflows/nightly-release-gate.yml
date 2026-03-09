@@ -1,0 +1,79 @@
+name: Nightly Release Gate
+
+on:
+  schedule:
+    - cron: "0 18 * * *"
+  workflow_dispatch:
+    inputs:
+      window_minutes:
+        description: "Metrics snapshot window (minutes)"
+        required: false
+        default: "10080"
+      run_1000_gate:
+        description: "Run strict 1000-node gate after nightly drill"
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  nightly-gate:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: command_neural
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d command_neural"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/command_neural
+      PSQL_BIN: psql
+      EXTERNAL_API_TOKEN: dev-external-token
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.6.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Nightly auto-remediation drill
+        run: |
+          WINDOW_MINUTES="${{ github.event.inputs.window_minutes || '10080' }}" pnpm gate:release:auto-remediate:nightly
+
+      - name: Optional strict 1000-node gate
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.run_1000_gate == 'true' }}
+        run: pnpm gate:release:strict:1000
+
+      - name: Upload release gate artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-release-gate-artifacts
+          path: |
+            docs/reports/**
+            docs/release-acceptance-latest.md
+            docs/release-gate-auto-remediation-drill-latest.md
+            docs/release-gate-auto-remediation-history.md
+            docs/external-metrics-latest.json
+            docs/external-metrics-weekly-trend.md
+            docs/scalability-baseline-latest.json
+          if-no-files-found: warn
+
