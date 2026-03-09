@@ -125,7 +125,8 @@ jobs:
             }
 
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            const title = `[Nightly Gate] BLOCKED ${new Date().toISOString().slice(0, 10)}`;
+            const day = new Date().toISOString().slice(0, 10);
+            const title = `[Nightly Gate] BLOCKED ${day}`;
             const body = [
               'Nightly release gate failed.',
               '',
@@ -139,9 +140,29 @@ jobs:
               'Please review artifacts: `nightly-release-gate-artifacts` and run remediation checklist if needed.'
             ].join('\n');
 
-            await github.rest.issues.create({
+            const existing = await github.paginate(github.rest.issues.listForRepo, {
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title,
-              body
+              state: 'open',
+              per_page: 100
             });
+            const matched = existing.find((issue) => issue.title === title);
+            if (matched) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: matched.number,
+                body: [
+                  'Another nightly gate failure was detected.',
+                  '',
+                  body
+                ].join('\n')
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body
+              });
+            }
