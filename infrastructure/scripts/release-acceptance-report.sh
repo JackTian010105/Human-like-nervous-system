@@ -7,6 +7,11 @@ cd "$ROOT_DIR"
 RUN_SCALABILITY_BASELINE="${RUN_SCALABILITY_BASELINE:-1}"
 RUN_NODE_SCALE_1000="${RUN_NODE_SCALE_1000:-0}"
 RUN_FULL_DRILL="${RUN_FULL_DRILL:-1}"
+TARGET_SCALABILITY_SUCCESS_RATE="${TARGET_SCALABILITY_SUCCESS_RATE:-0.99}"
+TARGET_SCALABILITY_P95_MS="${TARGET_SCALABILITY_P95_MS:-5000}"
+TARGET_API_AVAILABILITY="${TARGET_API_AVAILABILITY:-0.995}"
+TARGET_EVENT_DELIVERY_SUCCESS="${TARGET_EVENT_DELIVERY_SUCCESS:-0.999}"
+TARGET_RETRY_SUCCESS="${TARGET_RETRY_SUCCESS:-0.99}"
 
 REPORT_DIR="$ROOT_DIR/docs/reports"
 mkdir -p "$REPORT_DIR"
@@ -56,6 +61,11 @@ EXTERNAL_JSON_PATH="$ROOT_DIR/docs/external-metrics-latest.json"
 EXTERNAL_WEEKLY_PATH="$ROOT_DIR/docs/external-metrics-weekly-trend.md"
 EXTERNAL_SUMMARY="not available"
 EXTERNAL_WEEKLY_AVG="not available"
+SCALE_GATE_STATUS="WARN"
+EXTERNAL_GATE_STATUS="WARN"
+OVERALL_DECISION="WARN"
+SCALE_GATE_REASON="missing scalability snapshot"
+EXTERNAL_GATE_REASON="missing external metrics snapshot"
 if [[ -f "$EXTERNAL_JSON_PATH" ]]; then
   EXTERNAL_SUMMARY="$(node -e '
 const fs=require("fs");
@@ -80,6 +90,49 @@ console.log(`snapshotCount=${count}, apiAvailabilityAvg=${api}, deliverySuccessA
 ' "$EXTERNAL_WEEKLY_PATH")"
 fi
 
+if [[ -f "$SCALE_JSON_PATH" ]]; then
+  SCALE_GATE="$(node -e '
+const fs=require("fs");
+const j=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
+const targetRate=Number(process.argv[2]);
+const targetP95=Number(process.argv[3]);
+const okRate=Number(j.successRate) >= targetRate;
+const okP95=Number(j.p95LatencyMs) <= targetP95;
+const status=(okRate && okP95) ? "PASS" : "WARN";
+const reason=`successRate=${j.successRate} (target>=${targetRate}), p95LatencyMs=${j.p95LatencyMs} (target<=${targetP95})`;
+console.log(`${status}\t${reason}`);
+' "$SCALE_JSON_PATH" "$TARGET_SCALABILITY_SUCCESS_RATE" "$TARGET_SCALABILITY_P95_MS")"
+  SCALE_GATE_STATUS="${SCALE_GATE%%$'\t'*}"
+  SCALE_GATE_REASON="${SCALE_GATE#*$'\t'}"
+fi
+
+if [[ -f "$EXTERNAL_JSON_PATH" ]]; then
+  EXTERNAL_GATE="$(node -e '
+const fs=require("fs");
+const j=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
+const targetApi=Number(process.argv[2]);
+const targetDelivery=Number(process.argv[3]);
+const targetRetry=Number(process.argv[4]);
+const api=Number(j.apiRequests.availabilityRate);
+const delivery=Number(j.callbackDeliveries.eventDeliverySuccessRate);
+const retry=Number(j.callbackDeliveries.retrySuccessRate);
+const okApi=api>=targetApi;
+const okDelivery=delivery>=targetDelivery;
+const okRetry=retry>=targetRetry;
+const status=(okApi && okDelivery && okRetry) ? "PASS" : "WARN";
+const reason=`apiAvailability=${api} (target>=${targetApi}), deliverySuccess=${delivery} (target>=${targetDelivery}), retrySuccess=${retry} (target>=${targetRetry})`;
+console.log(`${status}\t${reason}`);
+' "$EXTERNAL_JSON_PATH" "$TARGET_API_AVAILABILITY" "$TARGET_EVENT_DELIVERY_SUCCESS" "$TARGET_RETRY_SUCCESS")"
+  EXTERNAL_GATE_STATUS="${EXTERNAL_GATE%%$'\t'*}"
+  EXTERNAL_GATE_REASON="${EXTERNAL_GATE#*$'\t'}"
+fi
+
+if [[ "$FULL_DRILL_STATUS" == "PASS" && "$SCALE_GATE_STATUS" == "PASS" && "$EXTERNAL_GATE_STATUS" == "PASS" ]]; then
+  OVERALL_DECISION="PASS"
+else
+  OVERALL_DECISION="WARN"
+fi
+
 {
   echo "# Release Acceptance Report"
   echo ""
@@ -89,12 +142,19 @@ fi
   echo "- FullDrill: $FULL_DRILL_STATUS"
   echo "- RunScalabilityBaseline: $RUN_SCALABILITY_BASELINE"
   echo "- RunNodeScale1000: $RUN_NODE_SCALE_1000"
+  echo "- OverallDecision: $OVERALL_DECISION"
   echo ""
   echo "## KPI Snapshot"
   echo ""
   echo "- ScalabilityBaseline: $SCALE_SUMMARY"
   echo "- ExternalMetricsLatest: $EXTERNAL_SUMMARY"
   echo "- ExternalMetricsWeekly: $EXTERNAL_WEEKLY_AVG"
+  echo ""
+  echo "## Threshold Gates"
+  echo ""
+  echo "- ScalabilityGate: $SCALE_GATE_STATUS ($SCALE_GATE_REASON)"
+  echo "- ExternalMetricsGate: $EXTERNAL_GATE_STATUS ($EXTERNAL_GATE_REASON)"
+  echo "- FullDrillGate: $FULL_DRILL_STATUS"
   echo ""
   echo "## Validation Evidence"
   echo ""
