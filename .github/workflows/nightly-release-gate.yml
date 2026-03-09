@@ -166,3 +166,42 @@ jobs:
                 body
               });
             }
+
+      - name: Auto-close issue on gate recovery
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const day = new Date().toISOString().slice(0, 10);
+            const title = `[Nightly Gate] BLOCKED ${day}`;
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
+            const openIssues = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100
+            });
+            const matched = openIssues.find((issue) => issue.title === title);
+            if (!matched) {
+              core.info(`No open nightly gate issue to close for ${day}`);
+              return;
+            }
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: matched.number,
+              body: [
+                'Nightly gate recovered to PASS. Closing this issue.',
+                '',
+                `- Recovery run: ${runUrl}`
+              ].join('\n')
+            });
+
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: matched.number,
+              state: 'closed'
+            });
