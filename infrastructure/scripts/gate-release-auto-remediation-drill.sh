@@ -20,7 +20,7 @@ trap cleanup EXIT
 
 extract_overall() {
   local file="$1"
-  rg -n "^- OverallDecision:" "$file" -N | awk -F': ' '{print $2}' | tail -n 1
+  grep -E "^- OverallDecision:" "$file" | awk -F': ' '{print $2}' | tail -n 1
 }
 
 if [[ "$MODE" == "nightly" ]]; then

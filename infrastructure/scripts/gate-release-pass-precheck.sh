@@ -13,10 +13,10 @@ if [[ ! -f "$REPORT_PATH" ]]; then
   exit 93
 fi
 
-SCALE_LINE="$(rg -n "^- ScalabilityGate:" "$REPORT_PATH" -N | sed 's/^[[:space:]]*//')"
-EXTERNAL_LINE="$(rg -n "^- ExternalMetricsGate:" "$REPORT_PATH" -N | sed 's/^[[:space:]]*//')"
-FULL_LINE="$(rg -n "^- FullDrillGate:" "$REPORT_PATH" -N | sed 's/^[[:space:]]*//')"
-OVERALL_LINE="$(rg -n "^- OverallDecision:" "$REPORT_PATH" -N | sed 's/^[[:space:]]*//')"
+SCALE_LINE="$(grep -E "^- ScalabilityGate:" "$REPORT_PATH" | tail -n 1 | sed 's/^[[:space:]]*//')"
+EXTERNAL_LINE="$(grep -E "^- ExternalMetricsGate:" "$REPORT_PATH" | tail -n 1 | sed 's/^[[:space:]]*//')"
+FULL_LINE="$(grep -E "^- FullDrillGate:" "$REPORT_PATH" | tail -n 1 | sed 's/^[[:space:]]*//')"
+OVERALL_LINE="$(grep -E "^- OverallDecision:" "$REPORT_PATH" | tail -n 1 | sed 's/^[[:space:]]*//')"
 
 OVERALL_STATUS="$(echo "$OVERALL_LINE" | awk -F': ' '{print $2}')"
 SCALE_STATUS="$(echo "$SCALE_LINE" | awk -F': ' '{print $2}' | awk '{print $1}')"
@@ -74,4 +74,3 @@ STAMP_UTC="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
 echo "[report] remediation=$OUT_PATH"
 echo "RELEASE GATE PRECHECK PASS"
-
