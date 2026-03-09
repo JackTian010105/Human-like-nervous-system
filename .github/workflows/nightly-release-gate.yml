@@ -77,3 +77,26 @@ jobs:
             docs/scalability-baseline-latest.json
           if-no-files-found: warn
 
+      - name: Publish gate summary
+        if: always()
+        run: |
+          REPORT="docs/release-acceptance-latest.md"
+          {
+            echo "## Nightly Release Gate Summary"
+            echo ""
+            if [[ -f "$REPORT" ]]; then
+              overall="$(grep -E "^- OverallDecision:" "$REPORT" | tail -n 1 | sed 's/^- OverallDecision:[[:space:]]*//')"
+              full="$(grep -E "^- FullDrillGate:" "$REPORT" | tail -n 1 | sed 's/^- FullDrillGate:[[:space:]]*//')"
+              scale="$(grep -E "^- ScalabilityGate:" "$REPORT" | tail -n 1 | sed 's/^- ScalabilityGate:[[:space:]]*//')"
+              external="$(grep -E "^- ExternalMetricsGate:" "$REPORT" | tail -n 1 | sed 's/^- ExternalMetricsGate:[[:space:]]*//')"
+              echo "- OverallDecision: ${overall:-UNKNOWN}"
+              echo "- FullDrillGate: ${full:-UNKNOWN}"
+              echo "- ScalabilityGate: ${scale:-UNKNOWN}"
+              echo "- ExternalMetricsGate: ${external:-UNKNOWN}"
+              echo ""
+              echo "### Artifacts"
+              echo "- See uploaded artifact: \`nightly-release-gate-artifacts\`"
+            else
+              echo "- Release report not found at \`$REPORT\`"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
