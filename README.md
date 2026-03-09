@@ -80,6 +80,7 @@ pnpm gate:release:strict
 pnpm gate:release:strict:1000
 pnpm gate:release:precheck
 pnpm gate:release:auto-remediate
+pnpm gate:release:auto-remediate:nightly
 pnpm e2e:external-integration
 pnpm regression:db-persistence
 ```
@@ -98,6 +99,7 @@ Optional full-drill flags:
 - `pnpm gate:release:strict:1000` (strict + include 1000-node scale check)
 - `pnpm gate:release:precheck` (generate PASS action checklist from latest report)
 - `pnpm gate:release:auto-remediate` (test/staging drill: attempt WARN -> PASS transition)
+- `pnpm gate:release:auto-remediate:nightly` (nightly drill with history append)
 
 Signature verification guide: `docs/external-callback-signature.md`
 Partner onboarding SOP: `docs/external-integration-sop.md`
