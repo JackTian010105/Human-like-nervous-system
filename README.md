@@ -68,11 +68,17 @@ pnpm lint
 pnpm test
 pnpm format
 pnpm verify:callback-signature /tmp/payload.json <signature-hex> <secret>
+pnpm test:node-scale-1000
 pnpm test:scalability-baseline
 pnpm test:full-drill
 pnpm e2e:external-integration
 pnpm regression:db-persistence
 ```
+
+Optional full-drill flags:
+
+- `RUN_SCALABILITY_BASELINE=1 pnpm test:full-drill`
+- `RUN_NODE_SCALE_1000=1 pnpm test:full-drill`
 
 Signature verification guide: `docs/external-callback-signature.md`
 Partner onboarding SOP: `docs/external-integration-sop.md`

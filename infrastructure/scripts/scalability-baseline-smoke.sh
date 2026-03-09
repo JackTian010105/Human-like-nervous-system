@@ -174,6 +174,42 @@ echo "[result] success=$SUCCESS_COUNT failure=$FAIL_COUNT total=$COMMAND_COUNT"
 echo "[result] success_rate=$SUCCESS_RATE target>=$TARGET_SUCCESS_RATE"
 echo "[result] p95_chain_latency_ms=$P95_MS target<=$TARGET_P95_MS"
 
+REPORT_DIR="$ROOT_DIR/docs/reports"
+LATEST_REPORT="$ROOT_DIR/docs/scalability-baseline-latest.json"
+HISTORY_MD="$ROOT_DIR/docs/scalability-baseline-history.md"
+mkdir -p "$REPORT_DIR"
+STAMP_UTC="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+STAMP_FILE="$(date -u +"%Y%m%dT%H%M%SZ")"
+REPORT_FILE="$REPORT_DIR/scalability-baseline-$STAMP_FILE.json"
+cat >"$REPORT_FILE" <<JSON
+{
+  "timestamp": "$STAMP_UTC",
+  "commandCount": $COMMAND_COUNT,
+  "concurrency": $CONCURRENCY,
+  "successCount": $SUCCESS_COUNT,
+  "failCount": $FAIL_COUNT,
+  "successRate": $SUCCESS_RATE,
+  "p95LatencyMs": $P95_MS,
+  "targets": {
+    "successRateGte": $TARGET_SUCCESS_RATE,
+    "p95LatencyMsLte": $TARGET_P95_MS
+  }
+}
+JSON
+cp "$REPORT_FILE" "$LATEST_REPORT"
+
+if [[ ! -f "$HISTORY_MD" ]]; then
+  cat >"$HISTORY_MD" <<'MD'
+# Scalability Baseline History
+
+| Timestamp (UTC) | Command Count | Concurrency | Success Rate | P95 Latency (ms) |
+| --- | ---: | ---: | ---: | ---: |
+MD
+fi
+printf '| %s | %s | %s | %s | %s |\n' "$STAMP_UTC" "$COMMAND_COUNT" "$CONCURRENCY" "$SUCCESS_RATE" "$P95_MS" >>"$HISTORY_MD"
+echo "[report] latest=$LATEST_REPORT"
+echo "[report] snapshot=$REPORT_FILE"
+
 if ! awk "BEGIN {exit !($SUCCESS_RATE >= $TARGET_SUCCESS_RATE)}"; then
   echo "[error] success rate below target"
   [[ -f "$FAIL_FILE" ]] && tail -n 30 "$FAIL_FILE" || true

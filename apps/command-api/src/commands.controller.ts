@@ -46,10 +46,16 @@ import type {
   TriggerTimeoutScanResponse,
   TriggerNodeRecoveryRequest,
   TriggerNodeRecoveryResponse,
+  RegisterNodeRequest,
+  RegisterNodeResponse,
   UpdateNodeConfigResponse
 } from "@command-neural/shared-types";
 import { CommandsService } from "./commands.service";
-import { validateCreateCommandDraftRequest, validateUpdateNodeConfigRequest } from "./commands.validation";
+import {
+  validateCreateCommandDraftRequest,
+  validateRegisterNodeRequest,
+  validateUpdateNodeConfigRequest
+} from "./commands.validation";
 
 @Controller("commands")
 export class CommandsController {
@@ -202,6 +208,29 @@ export class CommandsController {
     @Query("severity") severity?: "CRITICAL" | "HIGH" | "MEDIUM"
   ): GetOperationsHealthResponse {
     return this.commandsService.getOperationsHealthPanel(severity);
+  }
+
+  @Post("/nodes/register")
+  registerNode(
+    @Body() body: RegisterNodeRequest,
+    @Headers("x-operator-role") operatorRole?: string
+  ): RegisterNodeResponse {
+    this.ensureOperatorRole(operatorRole, ["GUANNING", "SUNWU"]);
+    const validation = validateRegisterNodeRequest(body);
+    if (!validation.ok) {
+      throw new BadRequestException({
+        message: "Validation failed",
+        errors: validation.errors
+      });
+    }
+    const created = this.commandsService.registerNode(validation.value);
+    if (!created) {
+      throw new BadRequestException({
+        message: "Validation failed",
+        errors: { parentNodeId: "parent node does not exist" }
+      });
+    }
+    return created;
   }
 
   @Patch("/nodes/:nodeId/config")

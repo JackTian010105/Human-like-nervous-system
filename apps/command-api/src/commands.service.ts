@@ -23,6 +23,8 @@ import type {
   NodeConnectionStatus,
   NodeProfile,
   NodeRoleType,
+  RegisterNodeRequest,
+  RegisterNodeResponse,
   UpdateNodeConfigRequest,
   UpdateNodeConfigResponse,
   GetNodeDiagnosticsResponse,
@@ -723,19 +725,68 @@ export class CommandsService implements OnModuleInit {
   }
 
   isKnownNode(nodeId: string): boolean {
-    if (this.rootNodes.some((item) => item.nodeId === nodeId)) {
-      return true;
-    }
-    for (const members of this.downstreamByNode.values()) {
-      if (members.includes(nodeId)) {
-        return true;
-      }
-    }
-    return false;
+    return this.nodeProfiles.has(nodeId);
   }
 
   getNodeProfile(nodeId: string): NodeProfile | undefined {
     return this.nodeProfiles.get(nodeId);
+  }
+
+  registerNode(input: RegisterNodeRequest): RegisterNodeResponse | undefined {
+    const parentNodeId = input.parentNodeId?.trim();
+    if (parentNodeId && !this.nodeProfiles.has(parentNodeId)) {
+      return undefined;
+    }
+
+    const existing = this.nodeProfiles.get(input.nodeId);
+    if (existing) {
+      return {
+        node: existing,
+        created: false
+      };
+    }
+
+    const now = new Date().toISOString();
+    const profile: NodeProfile = {
+      nodeId: input.nodeId,
+      nodeName: input.nodeName,
+      roleType: input.roleType,
+      parentNodeId,
+      chainPosition: input.chainPosition?.trim() || undefined,
+      active: input.active ?? true,
+      connectionStatus: this.toConnectionStatus(input.roleType, input.active ?? true),
+      lastSeenAt: now,
+      updatedAt: now
+    };
+    this.nodeProfiles.set(profile.nodeId, profile);
+
+    if (parentNodeId) {
+      const downstream = this.downstreamByNode.get(parentNodeId) ?? [];
+      if (!downstream.includes(profile.nodeId)) {
+        downstream.push(profile.nodeId);
+      }
+      this.downstreamByNode.set(parentNodeId, downstream);
+    }
+
+    this.emitRealtime("SYSTEM", "NodeRegistered", {
+      nodeId: profile.nodeId,
+      roleType: profile.roleType,
+      parentNodeId: profile.parentNodeId ?? null
+    });
+
+    const auditEvent = [...this.auditEvents]
+      .reverse()
+      .find(
+        (event) =>
+          event.commandId === "SYSTEM" &&
+          event.nodeId === profile.nodeId &&
+          event.eventType === "NodeRegistered"
+      );
+    return {
+      node: profile,
+      created: true,
+      auditEvent
+    };
   }
 
   updateNodeConfig(nodeId: string, input: UpdateNodeConfigRequest): UpdateNodeConfigResponse | undefined {

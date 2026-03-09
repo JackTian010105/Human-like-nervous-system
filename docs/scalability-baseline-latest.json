@@ -1,0 +1,13 @@
+{
+  "timestamp": "2026-03-09T00:38:33Z",
+  "commandCount": 100,
+  "concurrency": 20,
+  "successCount": 100,
+  "failCount": 0,
+  "successRate": 1.0000,
+  "p95LatencyMs": 32.817,
+  "targets": {
+    "successRateGte": 0.99,
+    "p95LatencyMsLte": 5000
+  }
+}

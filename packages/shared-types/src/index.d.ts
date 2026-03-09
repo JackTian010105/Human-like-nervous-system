@@ -249,6 +249,19 @@ export interface UpdateNodeConfigRequest {
     chainPosition?: string;
     active?: boolean;
 }
+export interface RegisterNodeRequest {
+    nodeId: string;
+    nodeName: string;
+    roleType: NodeRoleType;
+    parentNodeId?: string;
+    chainPosition?: string;
+    active?: boolean;
+}
+export interface RegisterNodeResponse {
+    node: NodeProfile;
+    created: boolean;
+    auditEvent?: AuditEvent;
+}
 export interface UpdateNodeConfigResponse {
     node: NodeProfile;
     auditEvent: AuditEvent;

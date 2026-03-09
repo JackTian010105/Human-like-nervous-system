@@ -1,4 +1,8 @@
-import type { CreateCommandDraftRequest, UpdateNodeConfigRequest } from "@command-neural/shared-types";
+import type {
+  CreateCommandDraftRequest,
+  RegisterNodeRequest,
+  UpdateNodeConfigRequest
+} from "@command-neural/shared-types";
 
 type ValidationErrors = Partial<Record<keyof CreateCommandDraftRequest, string>>;
 
@@ -120,4 +124,73 @@ export function validateUpdateNodeConfigRequest(body: unknown): {
   }
 
   return { ok: true, value };
+}
+
+type RegisterNodeValidationErrors = {
+  nodeId?: string;
+  nodeName?: string;
+  roleType?: string;
+  parentNodeId?: string;
+  chainPosition?: string;
+  active?: string;
+};
+
+export function validateRegisterNodeRequest(body: unknown): {
+  ok: true;
+  value: RegisterNodeRequest;
+} | {
+  ok: false;
+  errors: RegisterNodeValidationErrors;
+} {
+  const candidate = (body ?? {}) as Record<string, unknown>;
+  const errors: RegisterNodeValidationErrors = {};
+
+  if (!isNonEmptyText(candidate.nodeId)) {
+    errors.nodeId = "nodeId is required";
+  }
+  if (!isNonEmptyText(candidate.nodeName)) {
+    errors.nodeName = "nodeName is required";
+  }
+  if (!isNonEmptyText(candidate.roleType)) {
+    errors.roleType = "roleType is required";
+  }
+
+  let normalizedRole: RegisterNodeRequest["roleType"] | undefined;
+  if (isNonEmptyText(candidate.roleType)) {
+    const role = candidate.roleType.trim().toUpperCase();
+    if (!NODE_ROLE_TYPES.has(role)) {
+      errors.roleType = "roleType must be one of CAPTAIN|MEMBER|EXTERNAL";
+    } else {
+      normalizedRole = role as RegisterNodeRequest["roleType"];
+    }
+  }
+
+  if (candidate.active !== undefined && typeof candidate.active !== "boolean") {
+    errors.active = "active must be a boolean";
+  }
+  if (candidate.parentNodeId !== undefined && !isNonEmptyText(candidate.parentNodeId)) {
+    errors.parentNodeId = "parentNodeId must be a non-empty string";
+  }
+  if (candidate.chainPosition !== undefined && !isNonEmptyText(candidate.chainPosition)) {
+    errors.chainPosition = "chainPosition must be a non-empty string";
+  }
+  if (normalizedRole === "MEMBER" && !isNonEmptyText(candidate.parentNodeId)) {
+    errors.parentNodeId = "parentNodeId is required for MEMBER";
+  }
+
+  if (Object.keys(errors).length > 0 || !normalizedRole) {
+    return { ok: false, errors };
+  }
+
+  return {
+    ok: true,
+    value: {
+      nodeId: String(candidate.nodeId).trim(),
+      nodeName: String(candidate.nodeName).trim(),
+      roleType: normalizedRole,
+      parentNodeId: isNonEmptyText(candidate.parentNodeId) ? candidate.parentNodeId.trim() : undefined,
+      chainPosition: isNonEmptyText(candidate.chainPosition) ? candidate.chainPosition.trim() : undefined,
+      active: typeof candidate.active === "boolean" ? candidate.active : undefined
+    }
+  };
 }

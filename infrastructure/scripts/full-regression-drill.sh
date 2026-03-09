@@ -32,6 +32,13 @@ else
   echo "[skip] scalability baseline (set RUN_SCALABILITY_BASELINE=1 to enable)"
 fi
 
+if [[ "${RUN_NODE_SCALE_1000:-0}" == "1" ]]; then
+  echo "[run] pnpm test:node-scale-1000"
+  pnpm test:node-scale-1000
+else
+  echo "[skip] node scale 1000 (set RUN_NODE_SCALE_1000=1 to enable)"
+fi
+
 if [[ -n "${DATABASE_URL:-}" && -n "${PSQL_BIN:-}" ]]; then
   :
 else
