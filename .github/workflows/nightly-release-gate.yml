@@ -58,8 +58,42 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Nightly auto-remediation drill
+        id: nightly_drill
         run: |
+          set +e
           WINDOW_MINUTES="${{ github.event.inputs.window_minutes || '10080' }}" pnpm gate:release:auto-remediate:nightly
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          # 95 means "WARN, no PASS transition". Keep pipeline running to auto-handle issue workflow.
+          if [[ "$code" -ne 0 && "$code" -ne 95 ]]; then
+            echo "Unexpected drill failure exit code: $code"
+            exit "$code"
+          fi
+
+      - name: Parse release gate decision
+        id: gate_parse
+        if: always()
+        run: |
+          REPORT="docs/release-acceptance-latest.md"
+          overall="UNKNOWN"
+          full="UNKNOWN"
+          scale="UNKNOWN"
+          external="UNKNOWN"
+          if [[ -f "$REPORT" ]]; then
+            overall="$(grep -E "^- OverallDecision:" "$REPORT" | tail -n 1 | sed 's/^- OverallDecision:[[:space:]]*//')"
+            full="$(grep -E "^- FullDrillGate:" "$REPORT" | tail -n 1 | sed 's/^- FullDrillGate:[[:space:]]*//')"
+            scale="$(grep -E "^- ScalabilityGate:" "$REPORT" | tail -n 1 | sed 's/^- ScalabilityGate:[[:space:]]*//')"
+            external="$(grep -E "^- ExternalMetricsGate:" "$REPORT" | tail -n 1 | sed 's/^- ExternalMetricsGate:[[:space:]]*//')"
+          fi
+          blocked="false"
+          if [[ "$overall" != "PASS" ]]; then
+            blocked="true"
+          fi
+          echo "overall=$overall" >> "$GITHUB_OUTPUT"
+          echo "full=$full" >> "$GITHUB_OUTPUT"
+          echo "scale=$scale" >> "$GITHUB_OUTPUT"
+          echo "external=$external" >> "$GITHUB_OUTPUT"
+          echo "blocked=$blocked" >> "$GITHUB_OUTPUT"
 
       - name: Optional strict 1000-node gate
         if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.run_1000_gate == 'true' }}
@@ -87,15 +121,12 @@ jobs:
           {
             echo "## Nightly Release Gate Summary"
             echo ""
-            if [[ -f "$REPORT" ]]; then
-              overall="$(grep -E "^- OverallDecision:" "$REPORT" | tail -n 1 | sed 's/^- OverallDecision:[[:space:]]*//')"
-              full="$(grep -E "^- FullDrillGate:" "$REPORT" | tail -n 1 | sed 's/^- FullDrillGate:[[:space:]]*//')"
-              scale="$(grep -E "^- ScalabilityGate:" "$REPORT" | tail -n 1 | sed 's/^- ScalabilityGate:[[:space:]]*//')"
-              external="$(grep -E "^- ExternalMetricsGate:" "$REPORT" | tail -n 1 | sed 's/^- ExternalMetricsGate:[[:space:]]*//')"
-              echo "- OverallDecision: ${overall:-UNKNOWN}"
-              echo "- FullDrillGate: ${full:-UNKNOWN}"
-              echo "- ScalabilityGate: ${scale:-UNKNOWN}"
-              echo "- ExternalMetricsGate: ${external:-UNKNOWN}"
+            if [[ -f "$REPORT" || "${{ steps.gate_parse.outputs.overall }}" != "" ]]; then
+              echo "- OverallDecision: ${{ steps.gate_parse.outputs.overall }}"
+              echo "- FullDrillGate: ${{ steps.gate_parse.outputs.full }}"
+              echo "- ScalabilityGate: ${{ steps.gate_parse.outputs.scale }}"
+              echo "- ExternalMetricsGate: ${{ steps.gate_parse.outputs.external }}"
+              echo "- DrillExitCode: ${{ steps.nightly_drill.outputs.exit_code }}"
               echo ""
               echo "### Artifacts"
               echo "- See uploaded artifact: \`nightly-release-gate-artifacts\`"
@@ -105,25 +136,17 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Create issue on gate failure
-        if: failure()
+        if: always() && steps.gate_parse.outputs.blocked == 'true'
         uses: actions/github-script@v7
         with:
           script: |
             const gateLabel = 'nightly-gate';
             const fs = require('fs');
             const reportPath = 'docs/release-acceptance-latest.md';
-            let overall = 'UNKNOWN';
-            let full = 'UNKNOWN';
-            let scale = 'UNKNOWN';
-            let external = 'UNKNOWN';
-            if (fs.existsSync(reportPath)) {
-              const txt = fs.readFileSync(reportPath, 'utf8');
-              const pick = (re) => (txt.match(re)?.[1] ?? 'UNKNOWN').trim();
-              overall = pick(/^- OverallDecision:\s*(.+)$/m);
-              full = pick(/^- FullDrillGate:\s*(.+)$/m);
-              scale = pick(/^- ScalabilityGate:\s*(.+)$/m);
-              external = pick(/^- ExternalMetricsGate:\s*(.+)$/m);
-            }
+            const overall = process.env.GATE_OVERALL || 'UNKNOWN';
+            const full = process.env.GATE_FULL || 'UNKNOWN';
+            const scale = process.env.GATE_SCALE || 'UNKNOWN';
+            const external = process.env.GATE_EXTERNAL || 'UNKNOWN';
 
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const day = new Date().toISOString().slice(0, 10);
@@ -194,9 +217,14 @@ jobs:
                 labels: [gateLabel]
               });
             }
+          env:
+            GATE_OVERALL: ${{ steps.gate_parse.outputs.overall }}
+            GATE_FULL: ${{ steps.gate_parse.outputs.full }}
+            GATE_SCALE: ${{ steps.gate_parse.outputs.scale }}
+            GATE_EXTERNAL: ${{ steps.gate_parse.outputs.external }}
 
       - name: Auto-close issue on gate recovery
-        if: success()
+        if: always() && steps.gate_parse.outputs.blocked == 'false'
         uses: actions/github-script@v7
         with:
           script: |
@@ -233,3 +261,9 @@ jobs:
               issue_number: matched.number,
               state: 'closed'
             });
+
+      - name: Fail workflow when gate is blocked
+        if: always() && steps.gate_parse.outputs.blocked == 'true'
+        run: |
+          echo "Nightly release gate blocked: OverallDecision=${{ steps.gate_parse.outputs.overall }}"
+          exit 1
